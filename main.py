@@ -1,7 +1,8 @@
+import os
 import torch
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
-import os
+from sklearn.metrics import multilabel_confusion_matrix
 
 # Import from utils
 from utils.dataset import nih_chest_dataset
@@ -84,12 +85,26 @@ visualize_gradcam(model, val_ds, num_samples=5, device=DEVICE, save_dir='gradcam
 
 # 5. Testing and evaluation
 print("\nTesting on test set...")
-test_loss, test_acc, test_preds, test_labels = test_model(model, test_loader, criterion, DEVICE)
+test_loss, test_acc, test_preds, test_labels, avg_ms = test_model(model, test_loader, criterion, DEVICE)
+conf_matrix = multilabel_confusion_matrix(test_labels, test_preds)
+model_size_mb = os.path.getsize('checkpoints/lsnet_final.pth') / (1024 ** 2)
 
 print(f"Test Loss: {test_loss:.4f}")
 print(f"Test Accuracy: {test_acc:.4f}")
+if avg_ms is not None:
+    print(f"Avg Inference Speed: {avg_ms:.2f} ms/image")
+print(f"Model Size: {model_size_mb:.2f} MB")
 
 # Save test results
-save_test_results(test_loss, test_acc, test_preds, test_labels, 'results/test_results.json')
+save_test_results(
+    test_loss,
+    test_acc,
+    test_preds,
+    test_labels,
+    'results/test_results.json',
+    confusion_matrix=conf_matrix,
+    avg_inference_ms=avg_ms,
+    model_size_mb=model_size_mb,
+)
 
 print("\nAll results saved to results/ directory")

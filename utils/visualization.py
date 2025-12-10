@@ -36,14 +36,30 @@ def save_training_history(history, save_path='results/training_history.json'):
         json.dump(history, f)
     print(f"Training history saved to {save_path}")
 
-def save_test_results(test_loss, test_acc, test_preds, test_labels, save_path='results/test_results.json'):
-    """Save test results to JSON"""
+def save_test_results(
+    test_loss,
+    test_acc,
+    test_preds,
+    test_labels,
+    save_path='results/test_results.json',
+    confusion_matrix=None,
+    avg_inference_ms=None,
+    model_size_mb=None,
+):
+    """Save test results to JSON, optionally with confusion matrix and speed/size metrics."""
     results = {
         'test_loss': float(test_loss),
         'test_acc': float(test_acc),
         'predictions': test_preds.tolist(),
-        'labels': test_labels.tolist()
+        'labels': test_labels.tolist(),
     }
+
+    if confusion_matrix is not None:
+        results['confusion_matrix'] = confusion_matrix.tolist()
+    if avg_inference_ms is not None:
+        results['avg_inference_ms_per_image'] = float(avg_inference_ms)
+    if model_size_mb is not None:
+        results['model_size_mb'] = float(model_size_mb)
     
     with open(save_path, 'w') as f:
         json.dump(results, f)

@@ -54,16 +54,22 @@ def validate_epoch(model, val_loader, criterion, device):
     return val_loss, val_acc
 
 def test_model(model, test_loader, criterion, device):
-    """Test model on test set"""
+    """Test model on test set and measure per-image inference time (ms)."""
     model.eval()
     test_loss = 0
     test_preds = []
     test_labels = []
+    timings = []
     
     with torch.no_grad():
         for imgs, labels in tqdm(test_loader, desc='Testing'):
             imgs, labels = imgs.to(device), labels.to(device)
+            start = time.perf_counter()
             logits = model(imgs)
+            if device.startswith('cuda'):
+                torch.cuda.synchronize()
+            timings.append((time.perf_counter() - start) / imgs.size(0))
+
             loss = criterion(logits, labels)
             test_loss += loss.item()
             
@@ -74,5 +80,6 @@ def test_model(model, test_loader, criterion, device):
     test_preds = torch.cat(test_preds).numpy()
     test_labels = torch.cat(test_labels).numpy()
     test_acc = 1 - np.mean(np.abs(test_preds - test_labels))
+    avg_ms = float(np.mean(timings) * 1000.0) if timings else None
     
-    return test_loss, test_acc, test_preds, test_labels
+    return test_loss, test_acc, test_preds, test_labels, avg_ms

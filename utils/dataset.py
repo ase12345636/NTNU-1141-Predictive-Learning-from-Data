@@ -102,7 +102,7 @@ def read_nih_chest_dataset(data_path):
     torch.save({'X': X_test, 'Y': Y_test, 'labels': my_classes}, os.path.join(data_path, 'nih_chest_xray_test.pt'))
     torch.save({'X': X_train, 'Y': Y_train, 'labels': my_classes}, os.path.join(data_path, 'nih_chest_xray_train.pt'))
 
-def nih_chest_dataset(data_path = 'data', split='train'):
+def nih_chest_dataset(data_path='data', split='train', return_labels=False):
     Path(data_path).mkdir(exist_ok=True)
     if not os.listdir(data_path):
         download_data(data_path, "nih-chest-xrays/data")
@@ -115,7 +115,12 @@ def nih_chest_dataset(data_path = 'data', split='train'):
 
     if split == 'test':
         data = torch.load(test_pt)
-        return data['X'], data['Y']
     elif split == 'train':
         data = torch.load(train_pt)
-        return data['X'], data['Y']
+    else:
+        raise ValueError("split must be 'train' or 'test'")
+
+    labels = data.get('labels')
+    if return_labels:
+        return data['X'], data['Y'], labels
+    return data['X'], data['Y']
