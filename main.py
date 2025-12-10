@@ -1,60 +1,55 @@
+from utils.dataset import nih_chest_dataset
 import torch
 import numpy as np
 import lsnet.model.lsnet as lsnet
-# mac無法使用SKA, 改用普通的 Conv
-# import lsnet.model.lsnet_mac as lsnet
-from huggingface_hub import hf_hub_download
-from keras.datasets import mnist
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm.auto import trange, tqdm
 
 
 NUM_CLASSES = 10
 BATCH_SIZE = 32
-EPOCHS = 5
-DEVICE = 'cuda' # torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+EPOCHS = 50
+DEVICE = 'cuda'
 print("Using device:", DEVICE)
 
 
-# -----------------------------
-# 1. 載入 MNIST
-# -----------------------------
-print('下載dataset')
-(x_train, y_train), (x_test, y_test) = mnist.load_data()
-print('train data =', len(x_train))
-print('test data =', len(x_test))
+# # -----------------------------
+# # 1. 載入 MNIST
+# # -----------------------------
+# print('下載dataset')
+# (x_train, y_train), (x_test, y_test) = mnist.load_data()
+# print('train data =', len(x_train))
+# print('test data =', len(x_test))
 
-# 轉為 float32 並正規化
-print('正規化')
-x_train = x_train.astype(np.float32) / 255.0
-x_test = x_test.astype(np.float32) / 255.0
+# # 轉為 float32 並正規化
+# print('正規化')
+# x_train = x_train.astype(np.float32) / 255.0
+# x_test = x_test.astype(np.float32) / 255.0
 
-# MNIST 只有 1 channel → LSNet 預設 3 channels，需要複製
-x_train = np.stack([x_train]*3, axis=1)  # shape: (N,3,28,28)
-x_test = np.stack([x_test]*3, axis=1)
+# # MNIST 只有 1 channel → LSNet 預設 3 channels，需要複製
+# x_train = np.stack([x_train]*3, axis=1)  # shape: (N,3,28,28)
+# x_test = np.stack([x_test]*3, axis=1)
 
-y_train = torch.tensor(y_train, dtype=torch.long)
-y_test = torch.tensor(y_test, dtype=torch.long)
+# y_train = torch.tensor(y_train, dtype=torch.long)
+# y_test = torch.tensor(y_test, dtype=torch.long)
 
-train_ds = TensorDataset(torch.tensor(x_train), y_train)
-test_ds = TensorDataset(torch.tensor(x_test), y_test)
+# train_ds = TensorDataset(torch.tensor(x_train), y_train)
+# test_ds = TensorDataset(torch.tensor(x_test), y_test)
 
-train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
-test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
-print('資料處理 FIN.')
+# train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+# test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
+# print('資料處理 FIN.')
 
 
 
 # -----------------------------
 # 2. 建立模型
 # -----------------------------
-print('載入預訓練權重')
 ckpt_path = hf_hub_download("jameslahm/lsnet_t", "pytorch_model.bin")
 state = torch.load(ckpt_path, map_location=DEVICE, weights_only=True)
 # NUM_CLASSES 預設 1000, 若 NUM_CLASSES != 1000 則要移除最後一層權重
 state.pop("head.l.weight", None)
 state.pop("head.l.bias", None)
-print('載入完成')
 
 print('建立模型: lsnet_t')
 model = lsnet.lsnet_t(
@@ -66,16 +61,11 @@ model = lsnet.lsnet_t(
 model.load_state_dict(state, strict=False)
 print("LSNet loaded OK!")
 
-
-
 # -----------------------------
 # 3. Loss & Optimizer
 # -----------------------------
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-
-
-
 
 # -----------------------------
 # 4. 訓練
