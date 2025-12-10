@@ -304,12 +304,12 @@ def _cfg(url='', **kwargs):
     }
 
 default_cfgs = dict(
-    lsnet_t = _cfg(hf_hub='jameslahm/lsnet_t'),
-    lsnet_t_distill = _cfg(hf_hub='jameslahm/lsnet_t_distill'),
-    lsnet_s = _cfg(hf_hub='jameslahm/lsnet_s'),
-    lsnet_s_distill = _cfg(hf_hub='jameslahm/lsnet_s_distill'),
-    lsnet_b = _cfg(hf_hub='jameslahm/lsnet_b'),
-    lsnet_b_distill = _cfg(hf_hub='jameslahm/lsnet_b_distill'),
+    lsnet_t = _cfg(hf_hub_id='jameslahm/lsnet_t'),
+    lsnet_t_distill = _cfg(hf_hub_id='jameslahm/lsnet_t_distill'),
+    lsnet_s = _cfg(hf_hub_id='jameslahm/lsnet_s'),
+    lsnet_s_distill = _cfg(hf_hub_id='jameslahm/lsnet_s_distill'),
+    lsnet_b = _cfg(hf_hub_id='jameslahm/lsnet_b'),
+    lsnet_b_distill = _cfg(hf_hub_id='jameslahm/lsnet_b_distill'),
 )
 
 def _create_lsnet(variant, pretrained=False, **kwargs):
