@@ -317,7 +317,7 @@ def _create_lsnet(variant, pretrained=False, **kwargs):
         LSNet,
         variant,
         pretrained,
-        default_cfg=default_cfgs[variant],
+        pretrained_cfg=default_cfgs[variant],
         **kwargs,
     )
     return model

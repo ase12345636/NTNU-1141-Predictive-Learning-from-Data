@@ -1,7 +1,7 @@
 import os
 import torch
 import numpy as np
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import DataLoader, random_split
 from sklearn.metrics import multilabel_confusion_matrix
 
 # Import from utils
@@ -26,31 +26,27 @@ os.makedirs('gradcam', exist_ok=True)
 # 1. Load NIH chest dataset
 #------------------------------------
 print("Loading dataset...")
-X_train, y_train = nih_chest_dataset(split='train')
-X_test, y_test = nih_chest_dataset(split='test')
+full_train_ds = nih_chest_dataset(split='train')
+test_ds = nih_chest_dataset(split='test')
 
-train_size = int(TRAIN_RATIO * len(X_train))
-indices = torch.randperm(len(X_train))
-train_indices = indices[:train_size]
-val_indices = indices[train_size:]
+train_size = int(TRAIN_RATIO * len(full_train_ds))
+val_size = len(full_train_ds) - train_size
+train_ds, val_ds = random_split(full_train_ds, [train_size, val_size])
 
-X_train_split = X_train[train_indices]
-y_train_split = y_train[train_indices]
-X_val = X_train[val_indices]
-y_val = y_train[val_indices]
-
-train_ds = TensorDataset(X_train_split, y_train_split)
-val_ds = TensorDataset(X_val, y_val)
-test_ds = TensorDataset(X_test, y_test)
-
-train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
-val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
-test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
+train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,
+                         num_workers=4, pin_memory=True, persistent_workers=True)
+val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False,
+                       num_workers=4, pin_memory=True, persistent_workers=True)
+test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False,
+                        num_workers=4, pin_memory=True, persistent_workers=True)
 print(f'Train: {len(train_ds)}, Val: {len(val_ds)}, Test: {len(test_ds)}')
 
 # 2. Create LSNet model
 print("Loading LSNet model...")
 model = load_lsnet_model(num_classes=NUM_CLASSES, device=DEVICE)
+
+# Mixed precision scaler (enabled on CUDA)
+scaler = torch.cuda.amp.GradScaler(enabled=DEVICE.startswith('cuda'))
 
 # 3. Loss & Optimizer (for multilabel)
 criterion = torch.nn.BCEWithLogitsLoss()
@@ -63,7 +59,7 @@ history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
 for epoch in range(EPOCHS):
     print(f"\nEpoch {epoch+1}/{EPOCHS}")
     # Training
-    train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, DEVICE)
+    train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, DEVICE, scaler=scaler)
     # Validation
     val_loss, val_acc = validate_epoch(model, val_loader, criterion, DEVICE)
 

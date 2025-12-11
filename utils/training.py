@@ -1,21 +1,26 @@
+import time
 import torch
 import numpy as np
 from tqdm import tqdm
+from torch.cuda.amp import autocast, GradScaler
 
-def train_epoch(model, train_loader, criterion, optimizer, device):
-    """Train for one epoch"""
+def train_epoch(model, train_loader, criterion, optimizer, device, scaler: GradScaler | None = None):
+    """Train for one epoch with optional mixed precision."""
     model.train()
     train_loss = 0
     train_preds = []
     train_labels = []
+    scaler = scaler or GradScaler(enabled=device.startswith('cuda'))
     
     for imgs, labels in tqdm(train_loader, desc='Training'):
         imgs, labels = imgs.to(device), labels.to(device)
-        optimizer.zero_grad()
-        logits = model(imgs)
-        loss = criterion(logits, labels)
-        loss.backward()
-        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
+        with autocast(enabled=device.startswith('cuda')):
+            logits = model(imgs)
+            loss = criterion(logits, labels)
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
         train_loss += loss.item()
         
         with torch.no_grad():
@@ -30,7 +35,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
     return train_loss, train_acc
 
 def validate_epoch(model, val_loader, criterion, device):
-    """Validate for one epoch"""
+    """Validate for one epoch with mixed precision."""
     model.eval()
     val_loss = 0
     val_preds = []
@@ -39,8 +44,9 @@ def validate_epoch(model, val_loader, criterion, device):
     with torch.no_grad():
         for imgs, labels in tqdm(val_loader, desc='Validation'):
             imgs, labels = imgs.to(device), labels.to(device)
-            logits = model(imgs)
-            loss = criterion(logits, labels)
+            with autocast(enabled=device.startswith('cuda')):
+                logits = model(imgs)
+                loss = criterion(logits, labels)
             val_loss += loss.item()
             
             val_preds.append((torch.sigmoid(logits) > 0.5).cpu())
