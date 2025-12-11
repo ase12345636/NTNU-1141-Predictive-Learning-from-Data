@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,20 +23,69 @@ class GradCAM:
         self.gradients = grad_output[0].detach()
     
     def generate(self, input, class_idx):
-        """Generate Grad-CAM heatmap"""
+        """Generate Grad-CAM heatmap
+        
+        Args:
+            input: Input tensor of shape (1, C, H, W)
+            class_idx: Class index to generate CAM for
+            
+        Returns:
+            cam: 2D numpy array of shape (H, W) with normalized values [0, 1]
+        """
         self.model.eval()
+        
+        # Forward pass
         output = self.model(input)
         self.model.zero_grad()
         
-        target = output[:, class_idx]
+        # Use sigmoid score for multi-label setups to align with probabilities
+        # This often stabilizes Grad-CAM for medical multi-label tasks.
+        score = torch.sigmoid(output)[:, class_idx]
+        # Backward pass for specific class
+        target = score
         target.sum().backward()
         
-        gradients = self.gradients[0].mean(dim=1, keepdim=True)
-        activations = self.activations[0]
+        # Get gradients and activations
+        if self.gradients is None or self.activations is None:
+            # Fallback: return a blank CAM if hooks didn't work
+            h, w = input.shape[2], input.shape[3]
+            return np.ones((h, w)) * 0.5
         
-        cam = (gradients * activations).sum(dim=1).cpu().numpy()
+        # Expect tensors in (B, C, H, W). Compute channel weights by
+        # averaging gradients over spatial dimensions (H, W) per channel.
+        acts = self.activations[0]              # (C, H, W)
+        grads = self.gradients[0]               # (C, H, W)
+        
+        if grads.dim() != 3 or acts.dim() != 3:
+            # Fallback: return a neutral CAM if unexpected shape
+            h, w = input.shape[2], input.shape[3]
+            return np.ones((h, w)) * 0.5
+        
+        # Only positive gradients should contribute (Grad-CAM paper)
+        grads = torch.relu(grads)
+
+        # Channel-wise importance weights alpha_k (average over spatial dims)
+        weights = grads.mean(dim=(1, 2))        # (C)
+        
+        # Weighted sum over channels
+        cam_t = (weights.view(-1, 1, 1) * acts).sum(dim=0)  # (H, W)
+        cam = cam_t.detach().cpu().numpy()
+        
+        # ReLU on CAM to keep only positive influences
         cam = np.maximum(cam, 0)
-        cam = cam / (cam.max(axis=(1,2), keepdims=True) + 1e-8)
+        
+        # Normalize to [0, 1]
+        cam_max = cam.max()
+        cam_min = cam.min()
+        
+        if cam_max > cam_min:
+            cam = (cam - cam_min) / (cam_max - cam_min)
+        else:
+            # All zeros, return blank
+            cam = np.ones_like(cam) * 0.5
+        
+        # Ensure output is 2D
+        assert len(cam.shape) == 2, f"CAM should be 2D, got shape {cam.shape}"
         
         return cam
 
@@ -76,7 +126,7 @@ def visualize_gradcam(model, val_ds, num_samples=5, device='cuda', save_dir='gra
             # Grad-CAM heatmap
             cam = grad_cam.generate(img_batch, top_class)
             axes[1].imshow(img_np, alpha=0.6)
-            axes[1].imshow(cam[0], cmap='jet', alpha=0.4)
+            axes[1].imshow(cam, cmap='jet', alpha=0.4)
             axes[1].set_title(f'Grad-CAM (Class: {top_class})')
             axes[1].axis('off')
             

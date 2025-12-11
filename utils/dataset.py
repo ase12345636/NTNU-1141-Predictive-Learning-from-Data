@@ -91,5 +91,13 @@ class NIHChestDataset(Dataset):
 def nih_chest_dataset(data_path='data', split='train', return_labels=False):
     ds = NIHChestDataset(data_path=data_path, split=split)
     if return_labels:
-        return ds, ds.my_classes
+        # Load all data into tensors for evaluation
+        images = []
+        labels = []
+        for img, label in tqdm(ds, desc=f"Loading {split} data"):
+            images.append(img)
+            labels.append(label)
+        X = torch.stack(images)
+        y = torch.stack(labels)
+        return X, y, ds.my_classes
     return ds

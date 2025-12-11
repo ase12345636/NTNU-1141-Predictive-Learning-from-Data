@@ -26,8 +26,11 @@ def load_lsnet_model(num_classes=14, device='cuda', checkpoint_path=None):
         init_path = ckpt_path
         print("Loaded pretrained weights from Hugging Face")
 
-    state.pop("head.l.weight", None)
-    state.pop("head.l.bias", None)
+    # Only remove head weights if we're loading pretrained weights from HuggingFace
+    # If loading from a checkpoint, keep all weights (including the trained head)
+    if not (checkpoint_path and os.path.exists(checkpoint_path)):
+        state.pop("head.l.weight", None)
+        state.pop("head.l.bias", None)
 
     model.load_state_dict(state, strict=False)
     model = model.to(device)

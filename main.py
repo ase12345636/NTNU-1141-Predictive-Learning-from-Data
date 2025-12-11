@@ -13,7 +13,7 @@ from utils.gradcam import visualize_gradcam
 
 NUM_CLASSES = 14
 BATCH_SIZE = 32
-EPOCHS = 50
+EPOCHS = 10
 DEVICE = 'cuda'
 TRAIN_RATIO = 0.8
 

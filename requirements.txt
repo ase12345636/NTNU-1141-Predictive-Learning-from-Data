@@ -30,3 +30,5 @@ scikit-learn>=0.24.0
 # Optional: Interactive notebooks
 jupyter>=1.0.0
 ipython>=7.0.0
+
+seaborn

@@ -5,12 +5,13 @@ import os
 import time
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 from sklearn.metrics import multilabel_confusion_matrix
 from tqdm import tqdm
 
 from utils.dataset import nih_chest_dataset
 from utils.model import load_lsnet_model
+from utils.visualization_advanced import plot_confusion_matrix_heatmap, plot_true_confusion_matrix, plot_per_class_statistics
 
 
 def compute_model_size_mb(model, checkpoint_path=None):
@@ -34,18 +35,18 @@ def evaluate_test_set(
     device = (device or ("cuda" if torch.cuda.is_available() else "cpu")).lower()
     os.makedirs(results_dir, exist_ok=True)
 
-    X_test, y_test, class_names = nih_chest_dataset(
-        data_path=data_path, split="test", return_labels=True
-    )
-    if class_names is None:
-        class_names = [f"class_{i}" for i in range(y_test.shape[1])]
-
+    # Load test dataset using lazy loading (same as main.py)
+    test_ds = nih_chest_dataset(data_path=data_path, split="test", return_labels=False)
+    class_names = test_ds.my_classes
+    num_classes = len(class_names)
+    
     test_loader = DataLoader(
-        TensorDataset(X_test, y_test), batch_size=batch_size, shuffle=False
+        test_ds, batch_size=batch_size, shuffle=False, 
+        num_workers=4, pin_memory=True, persistent_workers=True
     )
 
     model = load_lsnet_model(
-        num_classes=y_test.shape[1], device=device, checkpoint_path=checkpoint_path
+        num_classes=num_classes, device=device, checkpoint_path=checkpoint_path
     )
     model.eval()
 
@@ -109,6 +110,22 @@ def evaluate_test_set(
 
     print(f"Saved metrics to {os.path.join(results_dir, 'test_metrics.json')}")
     print(f"Saved confusion matrix to {os.path.join(results_dir, 'confusion_matrix.json')}")
+    
+    # Plot true confusion matrix (14x14 actual vs predicted)
+    print("\nGenerating true confusion matrix...")
+    plot_true_confusion_matrix(labels, preds, class_names=class_names,
+                               save_path=os.path.join(results_dir, 'true_confusion_matrix.png'))
+    
+    # Plot per-class metrics heatmap with disease names
+    print("Generating per-class metrics heatmap...")
+    plot_confusion_matrix_heatmap(conf_records, class_names=class_names, 
+                                  save_path=os.path.join(results_dir, 'confusion_matrix_metrics.png'))
+    
+    # Save detailed per-class statistics
+    print("Saving per-class statistics...")
+    plot_per_class_statistics(conf_records, 
+                            save_path=os.path.join(results_dir, 'per_class_statistics.json'))
+    
     return metrics, conf_records
 
 

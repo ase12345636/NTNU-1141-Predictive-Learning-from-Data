@@ -1,0 +1,472 @@
+import os
+import json
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.patches import Rectangle
+import torch
+from PIL import Image
+from tqdm import tqdm
+
+
+def plot_confusion_matrix_heatmap(conf_records, class_names=None, save_path='results/confusion_matrix_heatmap.png'):
+    """
+    Plot true confusion matrix as a heatmap (actual predictions vs true labels)
+    
+    Args:
+        conf_records: List of dicts with 'class', 'tn', 'fp', 'fn', 'tp' keys
+        class_names: List of class names (optional, will use 'class' from records if not provided)
+        save_path: Path to save the figure
+    """
+    if not conf_records:
+        print("No confusion matrix records found")
+        return
+    
+    # For multilabel classification, we need the actual confusion matrix
+    # Since conf_records only has per-class metrics, we reconstruct from predictions
+    # This function will be called with the actual confusion matrix from evaluate.py
+    # So we'll use a different approach - plot the per-class metrics instead
+    
+    # Extract data
+    classes = [rec['class'] for rec in conf_records]
+    n_classes = len(classes)
+    
+    # Calculate metrics for each class
+    metrics_names = ['Sensitivity\n(Recall)', 'Specificity', 'Precision', 'F1-Score']
+    metrics_matrix = np.zeros((n_classes, len(metrics_names)))
+    
+    for idx, rec in enumerate(conf_records):
+        tn, fp, fn, tp = rec['tn'], rec['fp'], rec['fn'], rec['tp']
+        
+        # Sensitivity (Recall/TPR) = TP / (TP + FN)
+        sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
+        
+        # Specificity (TNR) = TN / (TN + FP)
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+        
+        # Precision = TP / (TP + FP)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        
+        # F1-Score = 2 * (Precision * Recall) / (Precision + Recall)
+        f1 = 2 * (precision * sensitivity) / (precision + sensitivity) if (precision + sensitivity) > 0 else 0
+        
+        metrics_matrix[idx, 0] = sensitivity
+        metrics_matrix[idx, 1] = specificity
+        metrics_matrix[idx, 2] = precision
+        metrics_matrix[idx, 3] = f1
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(12, 14))
+    
+    # Create heatmap with disease names
+    sns.heatmap(metrics_matrix, 
+                annot=True, 
+                fmt='.3f',
+                cmap='RdYlGn',  # Red-Yellow-Green colormap (better for performance metrics)
+                cbar_kws={'label': 'Score'},
+                xticklabels=metrics_names,
+                yticklabels=classes,
+                ax=ax,
+                vmin=0,
+                vmax=1,
+                square=False,
+                cbar=True,
+                linewidths=0.5,
+                linecolor='gray')
+    
+    ax.set_xlabel('Metrics', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Disease / Condition', fontsize=12, fontweight='bold')
+    ax.set_title('Per-Class Classification Performance Metrics', fontsize=14, fontweight='bold')
+    
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f"Saved per-class metrics heatmap to {save_path}")
+    plt.close()
+
+
+def plot_true_confusion_matrix(y_true, y_pred, class_names, save_path='results/true_confusion_matrix.png'):
+    """
+    Plot true confusion matrix for multilabel classification
+    
+    Args:
+        y_true: True labels (n_samples, n_classes) binary matrix
+        y_pred: Predicted labels (n_samples, n_classes) binary matrix
+        class_names: List of disease/class names
+        save_path: Path to save the figure
+    """
+    from sklearn.metrics import multilabel_confusion_matrix
+    
+    # Calculate confusion matrix
+    cm = multilabel_confusion_matrix(y_true, y_pred)
+    
+    # For visualization, we create a confusion matrix showing:
+    # - Rows: True classes
+    # - Columns: Predicted classes
+    # - Values: Number of samples
+    
+    n_classes = len(class_names)
+    confusion_matrix = np.zeros((n_classes, n_classes))
+    
+    # For each class, calculate how many samples were predicted as each class
+    for class_idx in range(n_classes):
+        # Get true positives for this class (samples that actually have this disease)
+        true_mask = y_true[:, class_idx] == 1
+        
+        if true_mask.sum() > 0:
+            # For each other class, count how many true positives were predicted as that class
+            for pred_class_idx in range(n_classes):
+                pred_mask = y_pred[:, pred_class_idx] == 1
+                confusion_matrix[class_idx, pred_class_idx] = (true_mask & pred_mask).sum()
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(14, 12))
+    
+    # Create heatmap
+    sns.heatmap(confusion_matrix, 
+                annot=True, 
+                fmt='.0f',
+                cmap='Blues',
+                cbar_kws={'label': 'Number of Samples'},
+                xticklabels=class_names,
+                yticklabels=class_names,
+                ax=ax,
+                square=True,
+                linewidths=0.5,
+                linecolor='lightgray')
+    
+    ax.set_xlabel('Predicted Class', fontsize=12, fontweight='bold')
+    ax.set_ylabel('True Class', fontsize=12, fontweight='bold')
+    ax.set_title('Confusion Matrix - Multilabel Classification', fontsize=14, fontweight='bold')
+    
+    # Rotate labels for readability
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=0)
+    
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f"Saved true confusion matrix to {save_path}")
+    plt.close()
+
+
+def plot_per_class_statistics(conf_records, save_path='results/per_class_statistics.json'):
+    """
+    Save detailed per-class statistics to JSON file and print summary
+    
+    Args:
+        conf_records: List of dicts with 'class', 'tn', 'fp', 'fn', 'tp' keys
+        save_path: Path to save the statistics JSON
+    """
+    import json
+    
+    statistics = {}
+    
+    for rec in conf_records:
+        class_name = rec['class']
+        tn, fp, fn, tp = rec['tn'], rec['fp'], rec['fn'], rec['tp']
+        
+        # Calculate metrics
+        total = tn + fp + fn + tp
+        
+        # Sensitivity (Recall/TPR)
+        sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
+        # Specificity (TNR)
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+        # Precision (PPV)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        # Negative Predictive Value
+        npv = tn / (tn + fn) if (tn + fn) > 0 else 0
+        # F1-Score
+        f1 = 2 * (precision * sensitivity) / (precision + sensitivity) if (precision + sensitivity) > 0 else 0
+        # Accuracy for this class
+        accuracy = (tp + tn) / total if total > 0 else 0
+        # False Positive Rate
+        fpr = fp / (tn + fp) if (tn + fp) > 0 else 0
+        # False Negative Rate
+        fnr = fn / (tp + fn) if (tp + fn) > 0 else 0
+        
+        statistics[class_name] = {
+            'true_positives': int(tp),
+            'true_negatives': int(tn),
+            'false_positives': int(fp),
+            'false_negatives': int(fn),
+            'total_samples': int(total),
+            'sensitivity': float(sensitivity),  # Recall/TPR
+            'specificity': float(specificity),  # TNR
+            'precision': float(precision),      # PPV
+            'npv': float(npv),                  # Negative Predictive Value
+            'f1_score': float(f1),
+            'accuracy': float(accuracy),
+            'fpr': float(fpr),                  # False Positive Rate
+            'fnr': float(fnr),                  # False Negative Rate
+        }
+    
+    # Save to JSON
+    os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
+    with open(save_path, 'w') as f:
+        json.dump(statistics, f, indent=2)
+    
+    print(f"Saved per-class statistics to {save_path}")
+    
+    # Also print summary
+    print("\n" + "="*80)
+    print("PER-CLASS CLASSIFICATION METRICS")
+    print("="*80)
+    for class_name, metrics in statistics.items():
+        print(f"\n{class_name}:")
+        print(f"  Sensitivity (Recall):     {metrics['sensitivity']:.4f}")
+        print(f"  Specificity:              {metrics['specificity']:.4f}")
+        print(f"  Precision:                {metrics['precision']:.4f}")
+        print(f"  F1-Score:                 {metrics['f1_score']:.4f}")
+        print(f"  TP={metrics['true_positives']:5d}, TN={metrics['true_negatives']:6d}, " +
+              f"FP={metrics['false_positives']:5d}, FN={metrics['false_negatives']:5d}")
+    print("="*80)
+
+
+def load_bbox_data(bbox_csv_path='data/BBox_List_2017.csv'):
+    """
+    Load bounding box data from CSV
+    
+    Returns:
+        Dict mapping image_name -> list of {'label': label, 'bbox': (x, y, w, h)}
+    """
+    bbox_dict = {}
+    
+    try:
+        # Read CSV with proper handling
+        df = pd.read_csv(bbox_csv_path)
+        
+        # Get column names - the bbox values start from column index 2
+        cols = df.columns.tolist()
+        
+        for _, row in df.iterrows():
+            img_name = row['Image Index']
+            label = row['Finding Label']
+            
+            # Extract bbox coordinates from columns 2, 3, 4, 5
+            try:
+                bbox = (float(row.iloc[2]),   # x
+                       float(row.iloc[3]),   # y
+                       float(row.iloc[4]),   # w
+                       float(row.iloc[5]))   # h
+            except (ValueError, IndexError):
+                continue
+            
+            if img_name not in bbox_dict:
+                bbox_dict[img_name] = []
+            
+            bbox_dict[img_name].append({
+                'label': label,
+                'bbox': bbox
+            })
+        
+        print(f"Loaded bbox data for {len(bbox_dict)} images")
+        if len(bbox_dict) > 0:
+            sample_names = list(bbox_dict.keys())[:3]
+            print(f"Sample images with bbox: {sample_names}")
+        return bbox_dict
+    
+    except Exception as e:
+        print(f"Error loading bbox data: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}
+
+
+def visualize_gradcam_with_bbox(model, dataset, bbox_data, class_names, 
+                                 num_samples=5, device='cuda', 
+                                 save_dir='results/gradcam_with_bbox',
+                                 img_size=224):
+    """
+    Generate Grad-CAM visualizations with bounding boxes overlaid
+    
+    Args:
+        model: The trained model
+        dataset: Dataset with __getitem__ returning (image, label, image_name)
+        bbox_data: Dict from load_bbox_data
+        class_names: List of class names
+        num_samples: Number of samples to visualize
+        device: Device to run on
+        save_dir: Directory to save visualizations
+        img_size: Original image size (224x224)
+    """
+    from utils.gradcam import GradCAM
+    
+    os.makedirs(save_dir, exist_ok=True)
+    
+    try:
+        # Get target layer
+        target_layer = None
+        try:
+            target_layer = model.blocks4[-1].mixer
+        except Exception:
+            target_layer = model.blocks4[-1] if hasattr(model, 'blocks4') else model
+        
+        grad_cam = GradCAM(model, target_layer)
+        model.eval()
+        
+        # Get sample indices
+        num_vis = min(num_samples, len(dataset))
+        sample_indices = np.random.choice(len(dataset), num_vis, replace=False)
+        
+        success_count = 0
+        
+        for idx, sample_idx in enumerate(sample_indices):
+            try:
+                # Get sample
+                sample = dataset[sample_idx]
+                
+                # Handle different dataset formats
+                if len(sample) == 3:
+                    img, label, img_name = sample
+                elif len(sample) == 2:
+                    img, label = sample
+                    img_name = f"sample_{sample_idx}.png"
+                else:
+                    continue
+                
+                # Ensure img is a tensor
+                if not isinstance(img, torch.Tensor):
+                    continue
+                
+                # Verify image shape is correct (C, H, W)
+                if len(img.shape) != 3:
+                    continue
+                
+                if img.shape[0] != 3 and img.shape[0] != 1:
+                    continue
+                
+                img_batch = img.unsqueeze(0).to(device)
+                
+                with torch.no_grad():
+                    logits = model(img_batch)
+                    probs = torch.sigmoid(logits)[0].cpu().numpy()
+                
+                # Get top predicted class
+                top_class = int(np.argsort(probs)[-1])
+                top_prob = float(probs[top_class])
+                
+                # Generate Grad-CAM - CAREFULLY HANDLE THE OUTPUT
+                cam = grad_cam.generate(img_batch, top_class)
+                
+                # Validate CAM shape and content
+                if cam is None:
+                    continue
+                
+                if not isinstance(cam, np.ndarray):
+                    continue
+                
+                # cam should be 2D (H, W) after generate(), not have extra dimensions
+                if len(cam.shape) == 2:
+                    # Good, it's already 2D
+                    cam_vis = cam
+                elif len(cam.shape) == 3 and cam.shape[0] == 1:
+                    # Shape is (1, H, W), squeeze it
+                    cam_vis = cam[0]
+                else:
+                    # Invalid shape
+                    continue
+                
+                # Normalize CAM properly
+                if cam_vis.max() > cam_vis.min():
+                    cam_vis = (cam_vis - cam_vis.min()) / (cam_vis.max() - cam_vis.min())
+                else:
+                    # CAM has no variation, skip
+                    continue
+                
+                # Prepare image - handle both RGB and grayscale (BEFORE using img_np size)
+                if img.shape[0] == 1:
+                    img_np = img[0].cpu().numpy()  # Grayscale (H, W)
+                    img_np = np.stack([img_np] * 3, axis=-1)  # Convert to RGB for display (H, W, 3)
+                else:
+                    img_np = img.permute(1, 2, 0).cpu().numpy()  # RGB (H, W, 3)
+                
+                # Clip to valid range
+                img_np = np.clip(img_np, 0, 1)
+                
+                # UPSAMPLE CAM to match image size (224x224) - NOW img_np is defined
+                cam_h, cam_w = cam_vis.shape
+                img_h, img_w = img_np.shape[0], img_np.shape[1]
+                
+                if cam_h != img_h or cam_w != img_w:
+                    try:
+                        from PIL import Image as PILImage
+                        # Convert to 0-255 range for PIL
+                        cam_uint8 = (cam_vis * 255).astype(np.uint8)
+                        cam_pil = PILImage.fromarray(cam_uint8)
+                        cam_pil = cam_pil.resize((img_w, img_h), PILImage.BILINEAR)
+                        cam_vis = np.array(cam_pil, dtype=np.float32) / 255.0
+                        
+                        # Re-normalize
+                        if cam_vis.max() > cam_vis.min():
+                            cam_vis = (cam_vis - cam_vis.min()) / (cam_vis.max() - cam_vis.min())
+                    except Exception:
+                        # If upsampling fails, just use as-is
+                        pass
+                
+                # Create SINGLE figure - Combined visualization
+                fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                
+                # Get class name safely
+                if top_class < len(class_names):
+                    class_name = class_names[top_class]
+                else:
+                    class_name = f"Class {top_class}"
+                
+                # Combined plot: Original image + Grad-CAM overlay + Ground Truth BBox
+                # Show original image more clearly (higher opacity)
+                ax.imshow(img_np, alpha=0.85)  # Original image with 85% opacity (was 60%)
+                ax.imshow(cam_vis, cmap='jet', alpha=0.25)  # Grad-CAM with 25% opacity (was 40%)
+                
+                # Draw ground truth bounding boxes (red = ground truth)
+                # Make bbox more visible with thicker lines and bright red
+                has_bbox = False
+                if img_name in bbox_data:
+                    for bbox_info in bbox_data[img_name]:
+                        x, y, w, h = bbox_info['bbox']
+                        try:
+                            # Bright red, thicker lines with white edge for contrast
+                            rect = Rectangle((x, y), w, h, linewidth=5, edgecolor='red', 
+                                           facecolor='none', label='Ground Truth' if not has_bbox else '',
+                                           linestyle='-', alpha=1.0)
+                            ax.add_patch(rect)
+                            has_bbox = True
+                        except Exception as e:
+                            pass
+                else:
+                    # No BBox data for this image - that's OK, just show the Grad-CAM
+                    pass
+                
+                # Add informative title
+                title = f'Grad-CAM: {class_name} ({top_prob:.2%})\n{os.path.basename(img_name)}'
+                ax.set_title(title, fontsize=12, fontweight='bold', pad=10)
+                ax.axis('off')
+                
+                # Add legend if there are bboxes
+                if has_bbox:
+                    ax.legend(loc='upper right', fontsize=11, framealpha=0.95)
+                
+                plt.tight_layout()
+                save_path = os.path.join(save_dir, f'gradcam_{success_count + 1}.png')
+                plt.savefig(save_path, dpi=150, bbox_inches='tight')
+                plt.close()
+                
+                success_count += 1
+                
+            except Exception as e:
+                # Silent fail, just continue to next sample
+                continue
+        
+        print(f"Successfully saved {success_count} Grad-CAM visualizations to {save_dir}/")
+        if success_count > 0 and len(bbox_data) > 0:
+            print(f"Note: {success_count} of {num_vis} samples visualized")
+            print(f"BBox data available for {len(bbox_data)} images in total")
+        return success_count > 0
+    
+    except Exception as e:
+        print(f"Error generating Grad-CAM with BBox: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
