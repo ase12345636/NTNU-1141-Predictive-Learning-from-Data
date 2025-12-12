@@ -27,7 +27,7 @@ def compute_model_size_mb(model, checkpoint_path=None):
 
 def evaluate_test_set(
     data_path="data",
-    checkpoint_path="checkpoints/lsnet_final.pth",
+    checkpoint_path="checkpoints/lsnet_best.pth",
     batch_size=32,
     device=None,
     results_dir="results",

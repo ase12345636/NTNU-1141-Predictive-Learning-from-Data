@@ -1,0 +1,8 @@
+{
+  "accuracy": 0.9119979664683342,
+  "avg_inference_ms_per_image": 0.6479466035047412,
+  "model_size_mb": 42.58,
+  "num_samples": 25596,
+  "checkpoint_path": "checkpoints/lsnet_final.pth",
+  "device": "cuda"
+}

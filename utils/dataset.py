@@ -119,5 +119,3 @@ def get_class_distribution(data_path='data', split='train'):
     print(f"Total samples: {len(ds)}")
     
     return dict(zip(ds.my_classes, class_counts))
-
-get_class_distribution()
