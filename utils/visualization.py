@@ -69,3 +69,96 @@ def save_model_weights(model, save_path='checkpoints/lsnet_final.pth'):
     """Save model weights"""
     torch.save(model.state_dict(), save_path)
     print(f"Model saved to {save_path}")
+
+def plot_learning_curves_f1(history, save_path='results/learning_curve_f1.png'):
+    """Plot and save learning curves with F1 scores"""
+    plt.figure(figsize=(18, 5))
+    
+    # Loss plot
+    plt.subplot(1, 3, 1)
+    plt.plot(history['train_loss'], label='Train Loss', marker='o', linewidth=2)
+    plt.plot(history['val_loss'], label='Val Loss', marker='s', linewidth=2)
+    plt.xlabel('Epoch', fontsize=12)
+    plt.ylabel('Loss', fontsize=12)
+    plt.legend(fontsize=10)
+    plt.title('Loss Curve', fontsize=14, fontweight='bold')
+    plt.grid(True, alpha=0.3)
+    
+    # Macro F1 plot
+    plt.subplot(1, 3, 2)
+    plt.plot(history['train_f1_macro'], label='Train Macro F1', marker='o', linewidth=2, color='green')
+    plt.plot(history['val_f1_macro'], label='Val Macro F1', marker='s', linewidth=2, color='orange')
+    plt.xlabel('Epoch', fontsize=12)
+    plt.ylabel('Macro F1 Score', fontsize=12)
+    plt.legend(fontsize=10)
+    plt.title('Macro F1 Score', fontsize=14, fontweight='bold')
+    plt.grid(True, alpha=0.3)
+    plt.ylim([0, 1])
+    
+    # Weighted F1 plot
+    plt.subplot(1, 3, 3)
+    plt.plot(history['train_f1_weighted'], label='Train Weighted F1', marker='o', linewidth=2, color='blue')
+    plt.plot(history['val_f1_weighted'], label='Val Weighted F1', marker='s', linewidth=2, color='red')
+    plt.xlabel('Epoch', fontsize=12)
+    plt.ylabel('Weighted F1 Score', fontsize=12)
+    plt.legend(fontsize=10)
+    plt.title('Weighted F1 Score', fontsize=14, fontweight='bold')
+    plt.grid(True, alpha=0.3)
+    plt.ylim([0, 1])
+    
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"F1 learning curves saved to {save_path}")
+
+def plot_learning_curves_combined(history, save_path='results/learning_curves_combined.png'):
+    """Plot and save learning curves with both accuracy and F1 scores"""
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    
+    # Loss plot
+    ax = axes[0, 0]
+    ax.plot(history['train_loss'], label='Train Loss', marker='o', linewidth=2)
+    ax.plot(history['val_loss'], label='Val Loss', marker='s', linewidth=2)
+    ax.set_xlabel('Epoch', fontsize=12)
+    ax.set_ylabel('Loss', fontsize=12)
+    ax.legend(fontsize=10)
+    ax.set_title('Loss Curve', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    
+    # Accuracy plot
+    ax = axes[0, 1]
+    ax.plot(history['train_acc'], label='Train Accuracy', marker='o', linewidth=2, color='blue')
+    ax.plot(history['val_acc'], label='Val Accuracy', marker='s', linewidth=2, color='red')
+    ax.set_xlabel('Epoch', fontsize=12)
+    ax.set_ylabel('Accuracy', fontsize=12)
+    ax.legend(fontsize=10)
+    ax.set_title('Accuracy Curve', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim([0, 1])
+    
+    # Macro F1 plot
+    ax = axes[1, 0]
+    ax.plot(history['train_f1_macro'], label='Train Macro F1', marker='o', linewidth=2, color='green')
+    ax.plot(history['val_f1_macro'], label='Val Macro F1', marker='s', linewidth=2, color='orange')
+    ax.set_xlabel('Epoch', fontsize=12)
+    ax.set_ylabel('Macro F1 Score', fontsize=12)
+    ax.legend(fontsize=10)
+    ax.set_title('Macro F1 Score', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim([0, 1])
+    
+    # Weighted F1 plot
+    ax = axes[1, 1]
+    ax.plot(history['train_f1_weighted'], label='Train Weighted F1', marker='o', linewidth=2, color='purple')
+    ax.plot(history['val_f1_weighted'], label='Val Weighted F1', marker='s', linewidth=2, color='brown')
+    ax.set_xlabel('Epoch', fontsize=12)
+    ax.set_ylabel('Weighted F1 Score', fontsize=12)
+    ax.legend(fontsize=10)
+    ax.set_title('Weighted F1 Score', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim([0, 1])
+    
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"Combined learning curves saved to {save_path}")

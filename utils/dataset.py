@@ -36,7 +36,7 @@ class NIHChestDataset(Dataset):
         self.my_classes = [
             'Atelectasis', 'Consolidation', 'Infiltration', 'Pneumothorax',
             'Edema', 'Emphysema', 'Fibrosis', 'Effusion', 'Pneumonia',
-            'Pleural_thickening', 'Cardiomegaly', 'Nodule', 'Mass', 'Hernia'
+            'Pleural_Thickening', 'Cardiomegaly', 'Nodule', 'Mass', 'Hernia'
         ]
         self.label2idx = {c: i for i, c in enumerate(self.my_classes)}
 
@@ -101,3 +101,23 @@ def nih_chest_dataset(data_path='data', split='train', return_labels=False):
         y = torch.stack(labels)
         return X, y, ds.my_classes
     return ds
+
+def get_class_distribution(data_path='data', split='train'):
+    """Get the count of samples for each class in the dataset."""
+    ds = NIHChestDataset(data_path=data_path, split=split)
+    
+    class_counts = np.zeros(len(ds.my_classes), dtype=np.int32)
+    
+    for _, label in tqdm(ds, desc=f"Counting {split} class distribution"):
+        class_counts += label.numpy().astype(np.int32)
+    
+    print(f"\n{split.upper()} set class distribution:")
+    print("-" * 40)
+    for class_name, count in zip(ds.my_classes, class_counts):
+        print(f"{class_name:20s}: {count:6d}")
+    print("-" * 40)
+    print(f"Total samples: {len(ds)}")
+    
+    return dict(zip(ds.my_classes, class_counts))
+
+get_class_distribution()
