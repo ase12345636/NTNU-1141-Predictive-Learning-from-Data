@@ -19,13 +19,16 @@ EPOCHS = 40
 DEVICE = 'cuda'
 TRAIN_RATIO = 0.8
 # Loss selection: 'bce', 'weighted', or 'focal'
-LOSS_TYPE = 'weighted'
-FOCAL_GAMMA = float(os.getenv('FOCAL_GAMMA', '2.0'))
+LOSS_TYPE = 'focal'
+# Focal Loss 參數調整 - 平衡版本
+FOCAL_GAMMA = float(os.getenv('FOCAL_GAMMA', '2.5'))  # 2.5較為平衡（不要太高）
+# 控制類別權重的強度：1.0=完全使用pos_weight, 0.5=減半, 0=不使用
+WEIGHT_SCALE = float(os.getenv('WEIGHT_SCALE', '0.6'))  # 降低權重強度
 
 # Create output directories
-os.makedirs('results2', exist_ok=True)
-os.makedirs('checkpoints2', exist_ok=True)
-os.makedirs('results2/gradcam', exist_ok=True)
+os.makedirs('results4', exist_ok=True)
+os.makedirs('checkpoints4', exist_ok=True)
+os.makedirs('results4/gradcam', exist_ok=True)
 
 #------------------------------------
 # 1. Load NIH chest dataset
@@ -68,20 +71,35 @@ def compute_pos_weight(subset, num_classes=NUM_CLASSES):
     return torch.tensor(neg / pos, dtype=torch.float32)
 
 pos_weight = compute_pos_weight(train_ds).to(DEVICE)
+print(f"Positive weights per class: {pos_weight.cpu().numpy()}")
 
 if LOSS_TYPE == 'focal':
     from utils.focal_loss import FocalLoss
-    # Normalize alpha to [0,1] for stability (optional but helpful)
-    alpha = (pos_weight / pos_weight.max()).to(DEVICE)
+    # 方法1: 使用平方根縮放（較溫和）
+    # alpha = torch.sqrt(pos_weight / pos_weight.max()).to(DEVICE)
+    
+    # 方法2: 線性縮放 + clamp（推薦）
+    # 先normalize到[0,1]，然後縮放到合適範圍
+    normalized_weight = pos_weight / pos_weight.max()
+    # 使用WEIGHT_SCALE控制強度：越小越平衡，越大越關注少數類
+    alpha = torch.clamp(0.5 + (normalized_weight - 0.5) * WEIGHT_SCALE, min=0.3, max=0.8).to(DEVICE)
+    
     criterion = FocalLoss(alpha=alpha, gamma=FOCAL_GAMMA, reduction='mean')
-    print(f"Using Focal Loss (gamma={FOCAL_GAMMA})")
+    print(f"Using Focal Loss (gamma={FOCAL_GAMMA}, alpha range: {alpha.min():.3f}-{alpha.max():.3f})")
+    print(f"Weight scale factor: {WEIGHT_SCALE}")
 elif LOSS_TYPE == 'weighted':
     criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     print("Using Weighted BCEWithLogitsLoss with computed pos_weight")
 else:
     criterion = torch.nn.BCEWithLogitsLoss()
     print("Using standard BCEWithLogitsLoss")
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+
+# 使用AdamW + 學習率調度器
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.01)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode='max', factor=0.5, patience=3
+)
+print(f"Learning rate scheduler: ReduceLROnPlateau (mode=max, patience=3)")
 
 # 4. Training with validation
 print("Starting training...")
@@ -119,26 +137,30 @@ for epoch in range(EPOCHS):
     
     print(f"Train Loss: {train_loss:.4f}, Acc: {train_acc:.4f}, Macro-F1: {train_f1_macro:.4f}, Weighted-F1: {train_f1_weighted:.4f}")
     print(f"Val Loss: {val_loss:.4f}, Acc: {val_acc:.4f}, Macro-F1: {val_f1_macro:.4f}, Weighted-F1: {val_f1_weighted:.4f}")
+    print(f"Current LR: {optimizer.param_groups[0]['lr']:.6f}")
+
+    # 更新學習率調度器
+    scheduler.step(val_f1_macro)
 
     # Save best model weights on improvement
     if val_f1_macro > best_val_f1:
         best_val_f1 = val_f1_macro
-        save_model_weights(model, 'checkpoints2/lsnet_best.pth')
-        print(f"Saved best checkpoint: checkpoints2/lsnet_best.pth (F1={best_val_f1:.4f})")
+        save_model_weights(model, 'checkpoints4/lsnet_best.pth')
+        print(f"Saved best checkpoint: checkpoints4/lsnet_best.pth (F1={best_val_f1:.4f})")
 
 # Save results
-save_model_weights(model, 'checkpoints2/lsnet_final.pth')
-plot_learning_curves_combined(history, 'results2/learning_curves_combined.png')
-save_training_history(history, 'results2/training_history.json')
+save_model_weights(model, 'checkpoints4/lsnet_final.pth')
+plot_learning_curves_combined(history, 'results4/learning_curves_combined.png')
+save_training_history(history, 'results4/training_history.json')
 
 # Grad-CAM visualization - Basic (from validation set)
 print("\nGenerating basic Grad-CAM visualizations...")
-visualize_gradcam(model, val_ds, num_samples=5, device=DEVICE, save_dir='results2/gradcam')
+visualize_gradcam(model, val_ds, num_samples=5, device=DEVICE, save_dir='results4/gradcam')
 
 # Advanced Grad-CAM - One per disease with bounding boxes
 print("\nGenerating advanced Grad-CAM with bounding boxes...")
 generate_gradcam_per_disease(model, class_names, device=DEVICE, 
-                            save_dir='results2/gradcam', data_path='data')
+                            save_dir='results4/gradcam', data_path='data')
 
 # 5. Testing and evaluation
 print("\nTesting on test set...")
@@ -146,7 +168,7 @@ test_loss, test_acc, test_f1_macro, test_f1_weighted, test_preds, test_labels, t
     model, test_loader, criterion, DEVICE
 )
 conf_matrix = multilabel_confusion_matrix(test_labels, test_preds)
-model_size_mb = os.path.getsize('checkpoints2/lsnet_final.pth') / (1024 ** 2)
+model_size_mb = os.path.getsize('checkpoints4/lsnet_final.pth') / (1024 ** 2)
 
 # Get class names
 class_names = test_ds.my_classes
@@ -175,7 +197,7 @@ test_metrics = {
     'model_size_mb': float(model_size_mb),
 }
 
-with open('results2/test_metrics.json', 'w') as f:
+with open('results4/test_metrics.json', 'w') as f:
     json.dump(test_metrics, f, indent=2)
 
 # Save confusion matrix
@@ -184,7 +206,7 @@ save_test_results(
     test_acc,
     test_preds,
     test_labels,
-    'results2/test_results.json',
+    'results4/test_results.json',
     confusion_matrix=conf_matrix,
     avg_inference_ms=avg_ms,
     model_size_mb=model_size_mb,
@@ -202,22 +224,22 @@ for idx, mat in enumerate(conf_matrix):
         'tp': int(tp),
     })
 
-with open('results2/confusion_matrix.json', 'w') as f:
+with open('results4/confusion_matrix.json', 'w') as f:
     json.dump(conf_records, f, indent=2)
-np.save('results2/confusion_matrix.npy', conf_matrix)
+np.save('results4/confusion_matrix.npy', conf_matrix)
 
 # Generate visualizations
 print("\nGenerating visualizations...")
 plot_true_confusion_matrix(test_labels, test_preds, class_names=class_names,
-                          save_path='results2/true_confusion_matrix.png')
+                          save_path='results4/true_confusion_matrix.png')
 
 plot_confusion_matrix_heatmap(conf_records, class_names=class_names, 
-                             save_path='results2/confusion_matrix_metrics.png')
+                             save_path='results4/confusion_matrix_metrics.png')
 
 plot_per_class_statistics(conf_records, 
-                         save_path='results2/per_class_statistics.json')
+                         save_path='results4/per_class_statistics.json')
 
-print("\nAll results saved to results2/ directory")
+print("\nAll results saved to results4/ directory")
 print("="*80)
 print("SUMMARY:")
 print(f"  Best Validation Macro F1: {best_val_f1:.4f}")

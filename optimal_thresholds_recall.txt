@@ -1,0 +1,15 @@
+# Optimal thresholds for each disease class
+Atelectasis: 0.1291
+Consolidation: 0.6876
+Infiltration: 0.0920
+Pneumothorax: 0.6840
+Edema: 0.9410
+Emphysema: 0.8980
+Fibrosis: 0.8331
+Effusion: 0.2051
+Pneumonia: 0.6553
+Pleural_Thickening: 0.7871
+Cardiomegaly: 0.7965
+Nodule: 0.3425
+Mass: 0.5236
+Hernia: 0.9986

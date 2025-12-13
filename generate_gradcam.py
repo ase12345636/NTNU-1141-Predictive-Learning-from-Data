@@ -163,7 +163,7 @@ def load_image_from_disk(img_name, data_path='data'):
 
 
 def generate_gradcam_for_image(model, img_tensor, img_name, bbox_info, class_names,
-                               save_dir='results/gradcam', device='cuda', target_class_name=None):
+                               save_dir='results3/gradcam', device='cuda', target_class_name=None):
     """
     Generate and save Grad-CAM visualization for a single image
     """
@@ -379,7 +379,7 @@ def main():
     # Load model
     print("\n3. Loading model...")
     model = load_lsnet_model(num_classes=NUM_CLASSES, device=DEVICE, 
-                            checkpoint_path='checkpoints/lsnet_final.pth')
+                            checkpoint_path='checkpoints3/lsnet_final.pth')
     model.eval()
     print(f"✓ Model loaded on {DEVICE}")
     
@@ -445,7 +445,7 @@ def main():
             img_name=chosen,
             bbox_info=bbox_info_scaled,
             class_names=CLASS_NAMES,
-            save_dir='results/gradcam',
+            save_dir='results3/gradcam',
             device=DEVICE,
             target_class_name=disease
         )
@@ -458,7 +458,7 @@ def main():
     
     print("\n" + "="*70)
     print(f"COMPLETED: {success_count}/{num_found} Grad-CAM visualizations saved")
-    print(f"Output directory: results/gradcam/")
+    print(f"Output directory: results3/gradcam/")
     print("="*70)
 
 

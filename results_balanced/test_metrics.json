@@ -1,0 +1,33 @@
+{
+  "config": "BALANCED",
+  "config_params": {
+    "loss_type": "focal",
+    "focal_gamma": 2.0,
+    "weight_scale": 0.5,
+    "alpha_min": 0.35,
+    "alpha_max": 0.75,
+    "description": "\u5e73\u8861\u7248\uff1a\u9069\u5ea6\u95dc\u6ce8\u5c11\u6578\u985e\uff0cgamma=2.0"
+  },
+  "test_loss": 0.10690098711125756,
+  "test_accuracy": 0.9150648564100266,
+  "test_f1_macro": 0.12207579592546706,
+  "test_f1_weighted": 0.18955827946646836,
+  "test_f1_per_class": {
+    "Atelectasis": 0.1723009814612868,
+    "Consolidation": 0.05405405405405406,
+    "Infiltration": 0.25811806203963067,
+    "Pneumothorax": 0.15918869084204057,
+    "Edema": 0.0783673469387755,
+    "Emphysema": 0.1258229700073153,
+    "Fibrosis": 0.00411522633744856,
+    "Effusion": 0.34556824361065797,
+    "Pneumonia": 0.006546644844517185,
+    "Pleural_Thickening": 0.06219081272084806,
+    "Cardiomegaly": 0.19472913616398244,
+    "Nodule": 0.0706713780918728,
+    "Mass": 0.15516537362188648,
+    "Hernia": 0.022222222222222223
+  },
+  "avg_inference_ms": 0.6943021868106111,
+  "model_size_mb": 42.582709312438965
+}

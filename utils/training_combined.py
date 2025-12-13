@@ -5,8 +5,18 @@ from tqdm import tqdm
 from torch.cuda.amp import autocast, GradScaler
 from sklearn.metrics import f1_score
 
-def train_epoch_combined(model, train_loader, criterion, optimizer, device, scaler: GradScaler | None = None):
-    """Train for one epoch with both accuracy and F1 score evaluation."""
+def train_epoch_combined(model, train_loader, criterion, optimizer, device, scaler: GradScaler | None = None, grad_clip_norm: float = None):
+    """Train for one epoch with both accuracy and F1 score evaluation.
+    
+    Args:
+        model: The model to train
+        train_loader: Training data loader
+        criterion: Loss function
+        optimizer: Optimizer
+        device: Device to train on
+        scaler: GradScaler for mixed precision training
+        grad_clip_norm: Maximum gradient norm for clipping (None = no clipping)
+    """
     model.train()
     train_loss = 0
     train_preds = []
@@ -20,6 +30,12 @@ def train_epoch_combined(model, train_loader, criterion, optimizer, device, scal
             logits = model(imgs)
             loss = criterion(logits, labels)
         scaler.scale(loss).backward()
+        
+        # 梯度裁剪
+        if grad_clip_norm is not None:
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
+        
         scaler.step(optimizer)
         scaler.update()
         train_loss += loss.item()

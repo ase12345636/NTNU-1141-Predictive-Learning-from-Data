@@ -27,10 +27,10 @@ def compute_model_size_mb(model, checkpoint_path=None):
 
 def evaluate_test_set(
     data_path="data",
-    checkpoint_path="checkpoints/lsnet_best.pth",
+    checkpoint_path="checkpoints3/lsnet_best.pth",
     batch_size=32,
     device=None,
-    results_dir="results",
+    results_dir="results3",
 ):
     device = (device or ("cuda" if torch.cuda.is_available() else "cpu")).lower()
     os.makedirs(results_dir, exist_ok=True)
@@ -134,7 +134,7 @@ def parse_args():
     parser.add_argument("--data-path", default="data", help="Directory containing processed .pt files")
     parser.add_argument(
         "--checkpoint-path",
-        default="checkpoints/lsnet_final.pth",
+        default="checkpoints3/lsnet_final.pth",
         help="Path to trained checkpoint; falls back to hub weights if missing",
     )
     parser.add_argument("--batch-size", type=int, default=32, help="Test batch size")
@@ -145,7 +145,7 @@ def parse_args():
     )
     parser.add_argument(
         "--results-dir",
-        default="results",
+        default="results3",
         help="Directory to write metrics and confusion matrix",
     )
     return parser.parse_args()
