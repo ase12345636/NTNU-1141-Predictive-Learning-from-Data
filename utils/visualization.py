@@ -30,10 +30,22 @@ def plot_learning_curves(history, save_path='results/learning_curve.png'):
     plt.close()
     print(f"Learning curve saved to {save_path}")
 
+
+def to_json_serializable(obj):
+    if isinstance(obj, np.generic):
+        return obj.item()
+    elif isinstance(obj, dict):
+        return {k: to_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [to_json_serializable(v) for v in obj]
+    else:
+        return obj
+
 def save_training_history(history, save_path='results/training_history.json'):
     """Save training history to JSON"""
+    history = to_json_serializable(history)
     with open(save_path, 'w') as f:
-        json.dump(history, f)
+        json.dump(history, f, indent=2)
     print(f"Training history saved to {save_path}")
 
 def save_test_results(
@@ -45,6 +57,7 @@ def save_test_results(
     confusion_matrix=None,
     avg_inference_ms=None,
     model_size_mb=None,
+    test_scores=None,
 ):
     """Save test results to JSON, optionally with confusion matrix and speed/size metrics."""
     results = {
@@ -60,6 +73,8 @@ def save_test_results(
         results['avg_inference_ms_per_image'] = float(avg_inference_ms)
     if model_size_mb is not None:
         results['model_size_mb'] = float(model_size_mb)
+    if test_scores is not None:
+        results['scores'] = test_scores.tolist()
     
     with open(save_path, 'w') as f:
         json.dump(results, f)
@@ -155,6 +170,58 @@ def plot_learning_curves_combined(history, save_path='results/learning_curves_co
     ax.set_ylabel('Weighted F1 Score', fontsize=12)
     ax.legend(fontsize=10)
     ax.set_title('Weighted F1 Score', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim([0, 1])
+    
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"Combined learning curves saved to {save_path}")
+
+def plot_learning_curves_combined_auc(history, save_path='results/learning_curves_combined.png'):
+    """Plot and save learning curves with both AUC and AUPRC"""
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+    # Macro AUC plot
+    ax = axes[0, 0]
+    ax.plot(history['train_auc_macro'], label='Train Macro AUC', marker='o', linewidth=2)
+    ax.plot(history['val_auc_macro'], label='Val Macro AUC', marker='s', linewidth=2)
+    ax.set_xlabel('Epoch', fontsize=12)
+    ax.set_ylabel('Macro AUC Score', fontsize=12)
+    ax.legend(fontsize=10)
+    ax.set_title('Macro AUC Score', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    
+    # Weighted AUC plot
+    ax = axes[0, 1]
+    ax.plot(history['train_auc_weighted'], label='Train Weighted AUC', marker='o', linewidth=2, color='blue')
+    ax.plot(history['val_auc_weighted'], label='Val Weighted AUC', marker='s', linewidth=2, color='red')
+    ax.set_xlabel('Epoch', fontsize=12)
+    ax.set_ylabel('Weighted AUC Score', fontsize=12)
+    ax.legend(fontsize=10)
+    ax.set_title('Weighted AUC Score', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim([0, 1])
+    
+    # Macro AUPRC plot
+    ax = axes[1, 0]
+    ax.plot(history['train_auprc_macro'], label='Train Macro AUPRC', marker='o', linewidth=2, color='green')
+    ax.plot(history['val_auprc_macro'], label='Val Macro AUPRC', marker='s', linewidth=2, color='orange')
+    ax.set_xlabel('Epoch', fontsize=12)
+    ax.set_ylabel('Macro AUPRC Score', fontsize=12)
+    ax.legend(fontsize=10)
+    ax.set_title('Macro AUPRC Score', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim([0, 1])
+    
+    # Weighted AUPRC plot
+    ax = axes[1, 1]
+    ax.plot(history['train_auprc_weighted'], label='Train Weighted AUPRC', marker='o', linewidth=2, color='purple')
+    ax.plot(history['val_auprc_weighted'], label='Val Weighted AUPRC', marker='s', linewidth=2, color='brown')
+    ax.set_xlabel('Epoch', fontsize=12)
+    ax.set_ylabel('Weighted AUPRC Score', fontsize=12)
+    ax.legend(fontsize=10)
+    ax.set_title('Weighted AUPRC Score', fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.set_ylim([0, 1])
     

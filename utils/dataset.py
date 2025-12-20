@@ -19,13 +19,14 @@ def download_data(data_dir, kaggle_data):
 class NIHChestDataset(Dataset):
     """Lazy-loading NIH Chest X-ray dataset (avoids loading all images into RAM)."""
 
-    def __init__(self, data_path='data', split='train'):
+    def __init__(self, data_path='data', split='train', grayscale=False):
         Path(data_path).mkdir(exist_ok=True)
         if not os.listdir(data_path):
             download_data(data_path, "nih-chest-xrays/data")
 
         self.data_path = data_path
         self.split = split
+        self.grayscale = grayscale
 
         self.image_dirs = [
             os.path.join(data_path, d, 'images') for d in os.listdir(data_path)
@@ -74,10 +75,18 @@ class NIHChestDataset(Dataset):
 
             self.samples.append((img_path, y))
 
-        self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-        ])
+        if self.grayscale:
+            self.transform = transforms.Compose([
+                transforms.Grayscale(num_output_channels=1),
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5], std=[0.5])
+            ])
+        else:
+            self.transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+            ])
 
     def __len__(self):
         return len(self.samples)
@@ -88,8 +97,8 @@ class NIHChestDataset(Dataset):
         img = self.transform(img)
         return img, torch.tensor(label, dtype=torch.float32)
 
-def nih_chest_dataset(data_path='data', split='train', return_labels=False):
-    ds = NIHChestDataset(data_path=data_path, split=split)
+def nih_chest_dataset(data_path='data', split='train', return_labels=False, grayscale=False):
+    ds = NIHChestDataset(data_path=data_path, split=split, grayscale=grayscale)
     if return_labels:
         # Load all data into tensors for evaluation
         images = []
