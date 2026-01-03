@@ -1,0 +1,54 @@
+{
+  "lsnet_t": {
+    "total_parameters": 11030222,
+    "trainable_parameters": 11030222
+  },
+  "lsnet_s": {
+    "total_parameters": 15703590,
+    "trainable_parameters": 15703590
+  },
+  "lsnet_b": {
+    "total_parameters": 22807790,
+    "trainable_parameters": 22807790
+  },
+  "effnet_b0": {
+    "total_parameters": 4025482,
+    "trainable_parameters": 4025482
+  },
+  "effnet_b1": {
+    "total_parameters": 6531118,
+    "trainable_parameters": 6531118
+  },
+  "effnet_b2": {
+    "total_parameters": 7720720,
+    "trainable_parameters": 7720720
+  },
+  "effnet_b3": {
+    "total_parameters": 10717750,
+    "trainable_parameters": 10717750
+  },
+  "effnet_b4": {
+    "total_parameters": 17573718,
+    "trainable_parameters": 17573718
+  },
+  "effnet_b5": {
+    "total_parameters": 28369470,
+    "trainable_parameters": 28369470
+  },
+  "effnet_b6": {
+    "total_parameters": 40767974,
+    "trainable_parameters": 40767974
+  },
+  "effnet_b7": {
+    "total_parameters": 63822814,
+    "trainable_parameters": 63822814
+  },
+  "densenet": {
+    "total_parameters": 6961934,
+    "trainable_parameters": 6961934
+  },
+  "mobilenet_v2": {
+    "total_parameters": 2241806,
+    "trainable_parameters": 2241806
+  }
+}

@@ -12,7 +12,7 @@ from utils.model import load_lsnet_model
 from utils.model_effnet import load_efficientnet_model, freeze_efficientnet_backbone, unfreeze_efficientnet_all
 from utils.training_combined import train_epoch_combined, validate_epoch_combined, test_model_combined, train_epoch_combined_auc, validate_epoch_combined_auc, test_model_combined_auc
 from utils.visualization import plot_learning_curves_combined, plot_learning_curves_combined_auc, save_training_history, save_test_results, save_model_weights
-from utils.visualization_advanced import plot_confusion_matrix_heatmap, plot_true_confusion_matrix, plot_per_class_statistics
+from utils.visualization_advanced import plot_confusion_matrix_heatmap, plot_true_confusion_matrix, plot_per_class_statistics, plot_per_class_statistics_auc
 from utils.gradcam import visualize_gradcam
 from utils.gradcam_advanced import generate_gradcam_per_disease
 
@@ -242,7 +242,7 @@ def main():
 
     # 5. Testing and evaluation
     print("\nTesting on test set...")
-    test_loss, test_acc, test_f1_macro, test_f1_weighted, test_preds, test_labels, test_f1_per_class, avg_ms, test_scores, test_auc_macro, test_auc_weighted, test_auprc_macro, test_auprc_weighted = test_model_combined_auc(
+    test_loss, test_acc, test_f1_macro, test_f1_weighted, test_preds, test_labels, test_f1_per_class, avg_ms, test_scores, test_auc_macro, test_auc_weighted, test_auprc_macro, test_auprc_weighted, test_auc_per_class, test_auprc_per_class = test_model_combined_auc(
         model, test_loader, criterion, DEVICE
     )
     conf_matrix = multilabel_confusion_matrix(test_labels, test_preds)
@@ -276,6 +276,8 @@ def main():
         'test_auprc_macro': float(test_auprc_macro),
         'test_auprc_weighted': float(test_auprc_weighted),
         'test_f1_per_class': {name: float(f1) for name, f1 in zip(class_names, test_f1_per_class)},
+        'test_auc_per_class': {name: float(auc) for name, auc in zip(class_names, test_auc_per_class)},
+        'test_auprc_per_class': {name: float(auprc) for name, auprc in zip(class_names, test_auprc_per_class)},
         'avg_inference_ms_per_image': float(avg_ms) if avg_ms else None,
         'model_size_mb': float(model_size_mb),
     }
@@ -320,7 +322,8 @@ def main():
     plot_confusion_matrix_heatmap(conf_records, class_names=class_names, 
                                 save_path=f'{RESULTS_DIR}/confusion_matrix_metrics.png')
 
-    plot_per_class_statistics(conf_records, 
+    plot_per_class_statistics_auc(conf_records, 
+                            test_auc_per_class, test_auprc_per_class,
                             save_path=f'{RESULTS_DIR}/per_class_statistics.json')
 
     print(f"\nAll results saved to {RESULTS_DIR}/ directory")

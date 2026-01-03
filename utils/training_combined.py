@@ -253,10 +253,52 @@ def test_model_combined_auc(model, test_loader, criterion, device):
     test_auc_weighted = multilabel_auc_score(test_labels, test_scores, average="weighted")
     test_auprc_macro = multilabel_auprc_score(test_labels, test_scores, average="macro")
     test_auprc_weighted = multilabel_auprc_score(test_labels, test_scores, average="weighted")
+    test_auc_per_class = []
+    test_auprc_per_class = []
+    for c in range(test_labels.shape[1]):
+        class_labels = test_labels[:, c]
+        class_scores = test_scores[:, c]
+        auc = compute_single_auc(class_labels, class_scores)
+        auc = auc if auc is not None else np.nan
+        test_auc_per_class.append(auc)
+        auprc = compute_single_auprc(class_labels, class_scores)
+        auprc = auprc if auprc is not None else np.nan
+        test_auprc_per_class.append(auprc)
 
     avg_ms = float(np.mean(timings) * 1000.0) if timings else None
     
-    return test_loss, test_acc, test_f1_macro, test_f1_weighted, test_preds, test_labels, test_f1_per_class, avg_ms, test_scores, test_auc_macro, test_auc_weighted, test_auprc_macro, test_auprc_weighted
+    return test_loss, test_acc, test_f1_macro, test_f1_weighted, test_preds, test_labels, test_f1_per_class, avg_ms, test_scores, test_auc_macro, test_auc_weighted, test_auprc_macro, test_auprc_weighted, test_auc_per_class, test_auprc_per_class
+
+def compute_single_auc(labels, scores):
+    # 過濾 NaN
+    mask = np.isfinite(scores)
+    labels = labels[mask]
+    scores = scores[mask]
+
+    # 必須同時有正、負樣本
+    if labels.size == 0 or np.unique(labels).size < 2:
+        return None
+
+    try:
+        score = roc_auc_score(labels, scores)
+    except ValueError:
+        return None
+    return score
+
+def compute_single_auprc(labels, scores):
+    # 過濾 NaN
+    mask = np.isfinite(scores)
+    labels = labels[mask]
+    scores = scores[mask]
+
+    if labels.size == 0 or np.unique(labels).size < 2:
+        return None
+
+    try:
+        score = average_precision_score(labels, scores)
+    except ValueError:
+        return None
+    return score
 
 def multilabel_auc_score(labels, scores, average="macro"):
     try:
@@ -278,18 +320,8 @@ def multilabel_auc_score(labels, scores, average="macro"):
             y_c = labels[:, c]
             s_c = scores[:, c]
 
-            # 過濾 NaN
-            mask = np.isfinite(s_c)
-            y_c = y_c[mask]
-            s_c = s_c[mask]
-
-            # 必須同時有正、負樣本
-            if y_c.size == 0 or np.unique(y_c).size < 2:
-                continue
-
-            try:
-                score = roc_auc_score(y_c, s_c)
-            except ValueError:
+            score = compute_single_auc(y_c, s_c)
+            if score is None:
                 continue
             
             auc_scores.append(score)
@@ -327,17 +359,8 @@ def multilabel_auprc_score(labels, scores, average="macro"):
             y_c = labels[:, c]
             s_c = scores[:, c]
 
-            # 過濾 NaN
-            mask = np.isfinite(s_c)
-            y_c = y_c[mask]
-            s_c = s_c[mask]
-
-            if y_c.size == 0 or np.unique(y_c).size < 2:
-                continue
-
-            try:
-                score = average_precision_score(y_c, s_c)
-            except ValueError:
+            score = compute_single_auprc(y_c, s_c)
+            if score is None:
                 continue
 
             auprc_scores.append(score)
@@ -354,3 +377,8 @@ def multilabel_auprc_score(labels, scores, average="macro"):
         auprc = np.mean(auprc_scores)
     
     return auprc
+
+def count_parameters(model):
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return total, trainable

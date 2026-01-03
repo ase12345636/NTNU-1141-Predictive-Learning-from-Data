@@ -1,0 +1,258 @@
+import os
+import torch
+import datetime
+import numpy as np
+from torch.utils.data import DataLoader, random_split, Subset
+from sklearn.metrics import multilabel_confusion_matrix
+from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
+
+# Import from utils
+from utils.dataset import nih_chest_dataset
+from utils.model import load_lsnet_model
+from utils.model_effnet import load_efficientnet_model
+from utils.model_densenet import load_densenet_model
+from utils.training_combined import train_epoch_combined, validate_epoch_combined, test_model_combined, train_epoch_combined_auc, validate_epoch_combined_auc, test_model_combined_auc
+from utils.visualization import plot_learning_curves_combined, save_training_history, save_test_results, save_model_weights
+from utils.visualization_advanced import plot_confusion_matrix_heatmap, plot_true_confusion_matrix, plot_per_class_statistics, plot_per_class_statistics_auc
+from utils.gradcam import visualize_gradcam
+from utils.gradcam_advanced import generate_gradcam_per_disease
+
+NUM_CLASSES = 14
+BATCH_SIZE = 32
+EPOCHS = 40
+DEVICE = 'cuda'
+TRAIN_RATIO = 0.8
+# Loss selection: 'bce', 'weighted', or 'focal'
+LOSS_TYPE = 'weighted'
+# Focal Loss 參數調整 - 平衡版本
+FOCAL_GAMMA = float(os.getenv('FOCAL_GAMMA', '2.0'))  # 2.5較為平衡（不要太高）
+# 控制類別權重的強度：1.0=完全使用pos_weight, 0.5=減半, 0=不使用
+WEIGHT_SCALE = float(os.getenv('WEIGHT_SCALE', '0.6'))  # 降低權重強度
+
+# 模型參數設定
+# Densenet時，設為True
+GRAYSCALE = False
+# 't', 's', 'b'
+LSNET_COMPLEXITY = 's'
+# 0 ~ 7
+EFFNET_COMPLEXITY = 1
+
+# 輸出目錄（根據配置命名）
+# RESULTS_DIR = f'results_effnet_b{EFFNET_COMPLEXITY}_freeze_test'
+# CHECKPOINTS_DIR = f'checkpoints_effnet_b{EFFNET_COMPLEXITY}_freeze'
+# CHECKPOINTS_FILENAME = f'effnetb{EFFNET_COMPLEXITY}_final'
+RESULTS_DIR = f'results_lsnet_{LSNET_COMPLEXITY}_freeze_test'
+CHECKPOINTS_DIR = f'checkpoints_lsnet_{LSNET_COMPLEXITY}_freeze'
+CHECKPOINTS_FILENAME = f'lsnet_{LSNET_COMPLEXITY}_final'
+
+def load_dataset():
+    full_train_ds = nih_chest_dataset(split='train', grayscale=GRAYSCALE)
+    test_ds = nih_chest_dataset(split='test', grayscale=GRAYSCALE)
+
+    train_size = int(TRAIN_RATIO * len(full_train_ds))
+    val_size = len(full_train_ds) - train_size
+    # train_ds, val_ds = random_split(full_train_ds, [train_size, val_size])
+    msss = MultilabelStratifiedShuffleSplit(n_splits=1, test_size=val_size, random_state=None)
+    indices = np.arange(len(full_train_ds))
+    # 假設 full_train_ds.samples[i][1] 是 multi-hot label
+    labels = np.array([s[1] for s in full_train_ds.samples])
+    train_idx, val_idx = next(msss.split(indices, labels))
+    train_ds = Subset(full_train_ds, train_idx)
+    val_ds   = Subset(full_train_ds, val_idx)
+
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True, persistent_workers=True)
+    test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True, persistent_workers=True)
+    print(f'Train: {len(train_ds)}, Val: {len(val_ds)}, Test: {len(test_ds)}')
+    
+    return train_ds, train_loader, val_ds, val_loader, test_ds, test_loader
+
+# Helper: compute per-class positive weights from the training subset
+def compute_pos_weight(subset, num_classes=NUM_CLASSES):
+    ds = subset.dataset if hasattr(subset, 'dataset') else subset
+    idxs = subset.indices if hasattr(subset, 'indices') else range(len(ds.samples))
+    pos = np.zeros(num_classes, dtype=np.float64)
+    for i in idxs:
+        pos += ds.samples[i][1]
+    n = float(len(idxs))
+    pos = np.clip(pos, 1.0, None)  # avoid division by zero
+    neg = n - pos
+    return torch.tensor(neg / pos, dtype=torch.float32)
+
+def get_criterion(loss_type, pos_weight):
+    if loss_type == 'focal':
+        from utils.focal_loss import FocalLoss
+        # 方法1: 使用平方根縮放（較溫和）
+        # alpha = torch.sqrt(pos_weight / pos_weight.max()).to(DEVICE)
+        
+        # 方法2: 線性縮放 + clamp（推薦）
+        # 先normalize到[0,1]，然後縮放到合適範圍
+        normalized_weight = pos_weight / pos_weight.max()
+        # 使用WEIGHT_SCALE控制強度：越小越平衡，越大越關注少數類
+        alpha = torch.clamp(0.5 + (normalized_weight - 0.5) * WEIGHT_SCALE, min=0.3, max=0.8).to(DEVICE)
+        
+        criterion = FocalLoss(alpha=alpha, gamma=FOCAL_GAMMA, reduction='mean')
+        print(f"Using Focal Loss (gamma={FOCAL_GAMMA}, alpha range: {alpha.min():.3f}-{alpha.max():.3f})")
+        print(f"Weight scale factor: {WEIGHT_SCALE}")
+    elif loss_type == 'weighted':
+        criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        print("Using Weighted BCEWithLogitsLoss with computed pos_weight")
+    else:
+        criterion = torch.nn.BCEWithLogitsLoss()
+        print("Using standard BCEWithLogitsLoss")
+    
+    return criterion
+
+def main():
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(f'{RESULTS_DIR}/gradcam', exist_ok=True)
+
+    #------------------------------------
+    # 1. Load NIH chest dataset
+    #------------------------------------
+    print("Loading dataset...")
+    train_ds, train_loader, val_ds, val_loader, test_ds, test_loader = load_dataset()
+    # Get class names
+    class_names = test_ds.my_classes
+
+    # 2. Create LSNet model
+    print("Loading LSNet model...")
+    model = load_lsnet_model(num_classes=NUM_CLASSES, device=DEVICE, checkpoint_path=f'{CHECKPOINTS_DIR}/{CHECKPOINTS_FILENAME}.pth', model_complexity=LSNET_COMPLEXITY)
+    # print("Loading EfficientNet model...")
+    # model = load_efficientnet_model(num_classes=NUM_CLASSES, device=DEVICE, checkpoint_path=f'{CHECKPOINTS_DIR}/{CHECKPOINTS_FILENAME}.pth', model_complexity=EFFNET_COMPLEXITY)
+    # print("Loading DenseNet model...")
+    # model = load_densenet_model(num_classes=NUM_CLASSES, device=DEVICE, checkpoint_path=f'{CHECKPOINTS_DIR}/{CHECKPOINTS_FILENAME}.pth')
+
+
+    # # Mixed precision scaler (enabled on CUDA)
+    # scaler = torch.cuda.amp.GradScaler(enabled=DEVICE.startswith('cuda'))
+
+    #------------------------------------
+    # 3. Loss & Optimizer (for multilabel)
+    #------------------------------------
+    pos_weight = compute_pos_weight(train_ds).to(DEVICE)
+    print(f"Positive weights per class: {pos_weight.cpu().numpy()}")
+    criterion = get_criterion(LOSS_TYPE, pos_weight)
+
+    # Advanced Grad-CAM - One per disease with bounding boxes
+    print("\nGenerating advanced Grad-CAM with bounding boxes...")
+    generate_gradcam_per_disease(model, class_names, device=DEVICE, 
+                                save_dir=f'{RESULTS_DIR}/gradcam', data_path='data')
+
+    # Advanced Grad-CAM - One per disease with bounding boxes
+    print("\nGenerating advanced Grad-CAM with bounding boxes...")
+    generate_gradcam_per_disease(model, class_names, device=DEVICE, 
+                                save_dir=f'{RESULTS_DIR}/gradcam', data_path='data')
+
+
+    # 5. Testing and evaluation
+    print("\nTesting on test set...")
+    test_loss, test_acc, test_f1_macro, test_f1_weighted, test_preds, test_labels, test_f1_per_class, avg_ms, test_scores, test_auc_macro, test_auc_weighted, test_auprc_macro, test_auprc_weighted, test_auc_per_class, test_auprc_per_class = test_model_combined_auc(
+        model, test_loader, criterion, DEVICE
+    )
+    conf_matrix = multilabel_confusion_matrix(test_labels, test_preds)
+    model_size_mb = os.path.getsize(f'{CHECKPOINTS_DIR}/{CHECKPOINTS_FILENAME}.pth') / (1024 ** 2)
+
+    # Get class names
+    class_names = test_ds.my_classes
+
+    print(f"Test Loss: {test_loss:.4f}")
+    print(f"Test Accuracy: {test_acc:.4f}")
+    print(f"Test Macro F1: {test_f1_macro:.4f}")
+    print(f"Test Weighted F1: {test_f1_weighted:.4f}")
+    print(f"Test Macro AUC / AUROC: {test_auc_macro:.4f}")
+    print(f"Test Weighted AUC / AUROC: {test_auc_weighted:.4f}")
+    print(f"Test Macro AUPRC: {test_auprc_macro:.4f}")
+    print(f"Test Weighted AUPRC: {test_auprc_weighted:.4f}")
+    if avg_ms is not None:
+        print(f"Avg Inference Speed: {avg_ms:.2f} ms/image")
+    print(f"Model Size: {model_size_mb:.2f} MB")
+
+    print("\nPer-class F1 scores:")
+    for i, (class_name, f1) in enumerate(zip(class_names, test_f1_per_class)):
+        print(f"  {class_name:20s}: {f1:.4f}")
+
+    # Save test results with both metrics
+    import json
+    test_metrics = {
+        'test_loss': float(test_loss),
+        'test_accuracy': float(test_acc),
+        'test_f1_macro': float(test_f1_macro),
+        'test_f1_weighted': float(test_f1_weighted),
+        'test_auc_macro': float(test_auc_macro),
+        'test_auc_weighted': float(test_auc_weighted),
+        'test_auprc_macro': float(test_auprc_macro),
+        'test_auprc_weighted': float(test_auprc_weighted),
+        'test_f1_per_class': {name: float(f1) for name, f1 in zip(class_names, test_f1_per_class)},
+        'test_auc_per_class': {name: float(auc) for name, auc in zip(class_names, test_auc_per_class)},
+        'test_auprc_per_class': {name: float(auprc) for name, auprc in zip(class_names, test_auprc_per_class)},
+        'avg_inference_ms_per_image': float(avg_ms) if avg_ms else None,
+        'model_size_mb': float(model_size_mb),
+    }
+
+    with open(f'{RESULTS_DIR}/test_metrics.json', 'w') as f:
+        json.dump(test_metrics, f, indent=2)
+
+    # Save confusion matrix
+    save_test_results(
+        test_loss,
+        test_acc,
+        test_preds,
+        test_labels,
+        f'{RESULTS_DIR}/test_results.json',
+        confusion_matrix=conf_matrix,
+        avg_inference_ms=avg_ms,
+        model_size_mb=model_size_mb,
+        test_scores=test_scores,
+    )
+
+    # Create confusion matrix records for visualization
+    conf_records = []
+    for idx, mat in enumerate(conf_matrix):
+        tn, fp, fn, tp = mat.ravel()
+        conf_records.append({
+            'class': class_names[idx],
+            'tn': int(tn),
+            'fp': int(fp),
+            'fn': int(fn),
+            'tp': int(tp),
+        })
+
+    with open(f'{RESULTS_DIR}/confusion_matrix.json', 'w') as f:
+        json.dump(conf_records, f, indent=2)
+    np.save(f'{RESULTS_DIR}/confusion_matrix.npy', conf_matrix)
+
+    # Generate visualizations
+    print("\nGenerating visualizations...")
+    plot_true_confusion_matrix(test_labels, test_preds, class_names=class_names,
+                            save_path=f'{RESULTS_DIR}/true_confusion_matrix.png')
+
+    plot_confusion_matrix_heatmap(conf_records, class_names=class_names, 
+                                save_path=f'{RESULTS_DIR}/confusion_matrix_metrics.png')
+
+    plot_per_class_statistics_auc(conf_records, 
+                            test_auc_per_class, test_auprc_per_class,
+                            save_path=f'{RESULTS_DIR}/per_class_statistics.json')
+
+    print(f"\nAll results saved to {RESULTS_DIR}/ directory")
+    print("="*80)
+    print("SUMMARY:")
+    # print(f"  Best Validation Macro F1:     {best_val_f1:.4f}")
+    print(f"  Final Test Accuracy:          {test_acc:.4f}")
+    print(f"  Final Test Macro F1:          {test_f1_macro:.4f}")
+    print(f"  Final Test Weighted F1:       {test_f1_weighted:.4f}")
+    print(f"  Final Test Macro AUC:         {test_auc_macro:.4f}")
+    print(f"  Final Test Weighted AUC:      {test_auc_weighted:.4f}")
+    print(f"  Final Test Macro AUPRC:       {test_auprc_macro:.4f}")
+    print(f"  Final Test Weighted AUPRC:    {test_auprc_weighted:.4f}")
+    print("="*80)
+
+if __name__ == "__main__":
+    start = datetime.datetime.now()
+    print(f"START: {start.strftime('%Y-%m-%d %H:%M:%S')}")
+    main()
+    end = datetime.datetime.now()
+    print(f"FINISH: {end.strftime('%Y-%m-%d %H:%M:%S')}")
+    duration = end - start
+    print(f"EXE TIME: {duration}")
+    print("="*80)

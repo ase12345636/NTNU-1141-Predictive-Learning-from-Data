@@ -1,0 +1,28 @@
+{
+  "test_loss": 1.7237849518656732,
+  "test_accuracy": 0.5840365886688232,
+  "test_f1_macro": 0.1811882083246393,
+  "test_f1_weighted": 0.2770848601121864,
+  "test_auc_macro": 0.6920188559764338,
+  "test_auc_weighted": 0.6774547932792522,
+  "test_auprc_macro": 0.1431677366194369,
+  "test_auprc_weighted": 0.22288978936304224,
+  "test_f1_per_class": {
+    "Atelectasis": 0.27110282832712124,
+    "Consolidation": 0.1755573713085094,
+    "Infiltration": 0.42431667441172743,
+    "Pneumothorax": 0.28437032285653197,
+    "Edema": 0.12289891329841295,
+    "Emphysema": 0.12752536015684937,
+    "Fibrosis": 0.0777119745774953,
+    "Effusion": 0.39411529223378705,
+    "Pneumonia": 0.05554721513286293,
+    "Pleural_Thickening": 0.12279069767441861,
+    "Cardiomegaly": 0.13641702050772428,
+    "Nodule": 0.15575781559161062,
+    "Mass": 0.16296077417448473,
+    "Hernia": 0.025562656293414837
+  },
+  "avg_inference_ms_per_image": 0.43704122420292285,
+  "model_size_mb": 15.642991065979004
+}

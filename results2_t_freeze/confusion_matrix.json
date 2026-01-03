@@ -1,0 +1,100 @@
+[
+  {
+    "class": "Atelectasis",
+    "tn": 19618,
+    "fp": 2699,
+    "fn": 2454,
+    "tp": 825
+  },
+  {
+    "class": "Consolidation",
+    "tn": 22426,
+    "fp": 1355,
+    "fn": 1628,
+    "tp": 187
+  },
+  {
+    "class": "Infiltration",
+    "tn": 14318,
+    "fp": 5166,
+    "fn": 3769,
+    "tp": 2343
+  },
+  {
+    "class": "Pneumothorax",
+    "tn": 21843,
+    "fp": 1088,
+    "fn": 1997,
+    "tp": 668
+  },
+  {
+    "class": "Edema",
+    "tn": 23892,
+    "fp": 779,
+    "fn": 772,
+    "tp": 153
+  },
+  {
+    "class": "Emphysema",
+    "tn": 23983,
+    "fp": 520,
+    "fn": 872,
+    "tp": 221
+  },
+  {
+    "class": "Fibrosis",
+    "tn": 24986,
+    "fp": 175,
+    "fn": 423,
+    "tp": 12
+  },
+  {
+    "class": "Effusion",
+    "tn": 17910,
+    "fp": 3028,
+    "fn": 2721,
+    "tp": 1937
+  },
+  {
+    "class": "Pneumonia",
+    "tn": 24760,
+    "fp": 281,
+    "fn": 542,
+    "tp": 13
+  },
+  {
+    "class": "Pleural_Thickening",
+    "tn": 23896,
+    "fp": 557,
+    "fn": 1064,
+    "tp": 79
+  },
+  {
+    "class": "Cardiomegaly",
+    "tn": 24086,
+    "fp": 441,
+    "fn": 849,
+    "tp": 220
+  },
+  {
+    "class": "Nodule",
+    "tn": 23165,
+    "fp": 808,
+    "fn": 1507,
+    "tp": 116
+  },
+  {
+    "class": "Mass",
+    "tn": 22969,
+    "fp": 879,
+    "fn": 1543,
+    "tp": 205
+  },
+  {
+    "class": "Hernia",
+    "tn": 25499,
+    "fp": 11,
+    "fn": 84,
+    "tp": 2
+  }
+]

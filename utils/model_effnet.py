@@ -9,17 +9,17 @@ from huggingface_hub import hf_hub_download
 
 def load_efficientnet_model(num_classes=14, device='cuda', checkpoint_path=None, model_complexity=0):
     if model_complexity == 7:
-        model = models.efficientnet_b2(weights="IMAGENET1K_V1")  # 預訓練模型
+        model = models.efficientnet_b7(weights="IMAGENET1K_V1")  # 預訓練模型
     elif model_complexity == 6:
-        model = models.efficientnet_b1(weights="IMAGENET1K_V1")  # 預訓練模型
+        model = models.efficientnet_b6(weights="IMAGENET1K_V1")  # 預訓練模型
     elif model_complexity == 5:
-        model = models.efficientnet_b1(weights="IMAGENET1K_V1")  # 預訓練模型
+        model = models.efficientnet_b5(weights="IMAGENET1K_V1")  # 預訓練模型
     elif model_complexity == 4:
-        model = models.efficientnet_b1(weights="IMAGENET1K_V1")  # 預訓練模型
+        model = models.efficientnet_b4(weights="IMAGENET1K_V1")  # 預訓練模型
     elif model_complexity == 3:
-        model = models.efficientnet_b1(weights="IMAGENET1K_V1")  # 預訓練模型
+        model = models.efficientnet_b3(weights="IMAGENET1K_V1")  # 預訓練模型
     elif model_complexity == 2:
-        model = models.efficientnet_b1(weights="IMAGENET1K_V1")  # 預訓練模型
+        model = models.efficientnet_b2(weights="IMAGENET1K_V1")  # 預訓練模型
     elif model_complexity == 1:
         model = models.efficientnet_b1(weights="IMAGENET1K_V1")  # 預訓練模型
     else:

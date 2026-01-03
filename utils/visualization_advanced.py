@@ -84,11 +84,8 @@ def plot_true_confusion_matrix(y_true, y_pred, class_names, save_path='results/t
     print(f"Saved true confusion matrix to {save_path}")
     plt.close()
 
-
-def plot_per_class_statistics(conf_records, save_path='results/per_class_statistics.json'):
-    """Save detailed per-class statistics"""
+def compute_per_class_statistics(conf_records):
     statistics = {}
-    
     for rec in conf_records:
         class_name = rec['class']
         tn, fp, fn, tp = rec['tn'], rec['fp'], rec['fn'], rec['tp']
@@ -118,6 +115,11 @@ def plot_per_class_statistics(conf_records, save_path='results/per_class_statist
             'fpr': float(fpr),
             'fnr': float(fnr),
         }
+    return statistics
+
+def plot_per_class_statistics(conf_records, save_path='results/per_class_statistics.json'):
+    """Save detailed per-class statistics"""
+    statistics = compute_per_class_statistics(conf_records)
     
     os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
     with open(save_path, 'w') as f:
@@ -133,6 +135,33 @@ def plot_per_class_statistics(conf_records, save_path='results/per_class_statist
         print(f"  Specificity:              {metrics['specificity']:.4f}")
         print(f"  Precision:                {metrics['precision']:.4f}")
         print(f"  F1-Score:                 {metrics['f1_score']:.4f}")
+        print(f"  TP={metrics['true_positives']:5d}, TN={metrics['true_negatives']:6d}, FP={metrics['false_positives']:5d}, FN={metrics['false_negatives']:5d}")
+    print("="*80)
+
+
+def plot_per_class_statistics_auc(conf_records, auc_scores, auprc_scores, save_path='results/per_class_statistics.json'):
+    """Save detailed per-class statistics"""
+    statistics = compute_per_class_statistics(conf_records)
+    for index, (class_name, metrics) in enumerate(statistics.items()):
+        metrics['auc'] = auc_scores[index]
+        metrics['auprc'] = auprc_scores[index]
+    
+    os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
+    with open(save_path, 'w') as f:
+        json.dump(statistics, f, indent=2)
+    
+    print(f"Saved per-class statistics to {save_path}")
+    print("\n" + "="*80)
+    print("PER-CLASS CLASSIFICATION METRICS")
+    print("="*80)
+    for class_name, metrics in statistics.items():
+        print(f"\n{class_name}:")
+        print(f"  Sensitivity (Recall):     {metrics['sensitivity']:.4f}")
+        print(f"  Specificity:              {metrics['specificity']:.4f}")
+        print(f"  Precision:                {metrics['precision']:.4f}")
+        print(f"  F1-Score:                 {metrics['f1_score']:.4f}")
+        print(f"  AUC-Score:                {metrics['auc']:.4f}")
+        print(f"  AUPRC-Score:              {metrics['auprc']:.4f}")
         print(f"  TP={metrics['true_positives']:5d}, TN={metrics['true_negatives']:6d}, FP={metrics['false_positives']:5d}, FN={metrics['false_negatives']:5d}")
     print("="*80)
 

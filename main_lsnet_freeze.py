@@ -11,7 +11,7 @@ from utils.dataset import nih_chest_dataset
 from utils.model import load_lsnet_model, freeze_lsnet_backbone, unfreeze_lsnet_all
 from utils.training_combined import train_epoch_combined, validate_epoch_combined, test_model_combined, train_epoch_combined_auc, validate_epoch_combined_auc, test_model_combined_auc
 from utils.visualization import plot_learning_curves_combined, plot_learning_curves_combined_auc, save_training_history, save_test_results, save_model_weights
-from utils.visualization_advanced import plot_confusion_matrix_heatmap, plot_true_confusion_matrix, plot_per_class_statistics
+from utils.visualization_advanced import plot_confusion_matrix_heatmap, plot_true_confusion_matrix, plot_per_class_statistics, plot_per_class_statistics_auc
 from utils.gradcam import visualize_gradcam
 from utils.gradcam_advanced import generate_gradcam_per_disease
 
@@ -29,11 +29,11 @@ FOCAL_GAMMA = float(os.getenv('FOCAL_GAMMA', '2.5'))  # 2.5較為平衡（不要
 WEIGHT_SCALE = float(os.getenv('WEIGHT_SCALE', '0.6'))  # 降低權重強度
 
 # 't', 's', 'b'
-LSNET_COMPLEXITY = 's'
+LSNET_COMPLEXITY = 'b'
 
 # 輸出目錄（根據配置命名）
-RESULTS_DIR = f'results_lsnet_{LSNET_COMPLEXITY}_freeze'
-CHECKPOINTS_DIR = f'checkpoints_lsnet_{LSNET_COMPLEXITY}_freeze'
+RESULTS_DIR = f'results_lsnet_{LSNET_COMPLEXITY}_freeze_step'
+CHECKPOINTS_DIR = f'checkpoints_lsnet_{LSNET_COMPLEXITY}_freeze_step'
 CHECKPOINTS_FILENAME = f'lsnet_{LSNET_COMPLEXITY}_best'
 CHECKPOINTS_FILENAME_FINAL = f'lsnet_{LSNET_COMPLEXITY}_final'
 
@@ -174,6 +174,7 @@ def main():
         'val_auprc_weighted': [],
     }
     best_val_f1 = 0.0
+    best_val_auc = 0.0
     best_epoch = 0
 
     freeze_lsnet_backbone(model)
@@ -219,14 +220,15 @@ def main():
         print(f"Current LR: {optimizer.param_groups[0]['lr']:.6f}")
 
         # 更新學習率調度器
-        scheduler.step(val_f1_macro)
+        scheduler.step(val_auc_weighted)
 
         # Save best model weights on improvement
-        if val_f1_macro > best_val_f1:
-            best_val_f1 = val_f1_macro
+        if val_auc_weighted > best_val_auc:
+            best_val_auc = val_auc_weighted
             best_epoch = epoch + 1
             save_model_weights(model, f'{CHECKPOINTS_DIR}/{CHECKPOINTS_FILENAME}.pth')
-            print(f"Saved best checkpoint: {CHECKPOINTS_DIR}/{CHECKPOINTS_FILENAME}.pth (F1={best_val_f1:.4f})")
+            # print(f"Saved best checkpoint: {CHECKPOINTS_DIR}/{CHECKPOINTS_FILENAME}.pth (F1={best_val_f1:.4f})")
+            print(f"Saved best checkpoint: {CHECKPOINTS_DIR}/{CHECKPOINTS_FILENAME}.pth (AUC={best_val_auc:.4f})")
 
         history['epoch'] = epoch + 1
         history['best_epoch'] = best_epoch
@@ -253,7 +255,7 @@ def main():
 
     # 5. Testing and evaluation
     print("\nTesting on test set...")
-    test_loss, test_acc, test_f1_macro, test_f1_weighted, test_preds, test_labels, test_f1_per_class, avg_ms, test_scores, test_auc_macro, test_auc_weighted, test_auprc_macro, test_auprc_weighted = test_model_combined_auc(
+    test_loss, test_acc, test_f1_macro, test_f1_weighted, test_preds, test_labels, test_f1_per_class, avg_ms, test_scores, test_auc_macro, test_auc_weighted, test_auprc_macro, test_auprc_weighted, test_auc_per_class, test_auprc_per_class = test_model_combined_auc(
         model, test_loader, criterion, DEVICE
     )
     conf_matrix = multilabel_confusion_matrix(test_labels, test_preds)
@@ -287,6 +289,8 @@ def main():
         'test_auprc_macro': float(test_auprc_macro),
         'test_auprc_weighted': float(test_auprc_weighted),
         'test_f1_per_class': {name: float(f1) for name, f1 in zip(class_names, test_f1_per_class)},
+        'test_auc_per_class': {name: float(auc) for name, auc in zip(class_names, test_auc_per_class)},
+        'test_auprc_per_class': {name: float(auprc) for name, auprc in zip(class_names, test_auprc_per_class)},
         'avg_inference_ms_per_image': float(avg_ms) if avg_ms else None,
         'model_size_mb': float(model_size_mb),
     }
@@ -331,13 +335,15 @@ def main():
     plot_confusion_matrix_heatmap(conf_records, class_names=class_names, 
                                 save_path=f'{RESULTS_DIR}/confusion_matrix_metrics.png')
 
-    plot_per_class_statistics(conf_records, 
+    plot_per_class_statistics_auc(conf_records, 
+                            test_auc_per_class, test_auprc_per_class,
                             save_path=f'{RESULTS_DIR}/per_class_statistics.json')
 
     print(f"\nAll results saved to {RESULTS_DIR}/ directory")
     print("="*80)
     print("SUMMARY:")
-    print(f"  Best Validation Macro F1:     {best_val_f1:.4f}")
+    # print(f"  Best Validation Macro F1:     {best_val_f1:.4f}")
+    print(f"  Best Validation Weighted AUC: {best_val_auc:.4f}")
     print(f"  Final Test Accuracy:          {test_acc:.4f}")
     print(f"  Final Test Macro F1:          {test_f1_macro:.4f}")
     print(f"  Final Test Weighted F1:       {test_f1_weighted:.4f}")
